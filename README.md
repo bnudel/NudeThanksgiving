@@ -53,6 +53,23 @@ Root directory: this folder. No build settings to change.
 
 Set `SITE_URL` to your Vercel domain after the first deploy.
 
+## Keeping Next.js patched
+
+Pinned to **Next 15.5.24** (the Maintenance LTS line as of August 2026). Next.js
+ships security releases roughly monthly, and App Router apps like this one are
+usually in scope, so check for a newer patch before any redeploy:
+
+```bash
+npm outdated next
+npm install next@latest-15.5   # or bump the pin in package.json
+```
+
+Next 16.x is the Active LTS line if you'd rather move up; it's a bigger jump
+than this site needs before November.
+
+This app doesn't use `next/image`, so the AVIF image-optimization advisories
+don't apply to it.
+
 ## Troubleshooting
 
 - **`/api/tabs`** — shows every tab found, the header row the classifier saw,
