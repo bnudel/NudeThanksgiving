@@ -329,6 +329,52 @@ test("classify identifies tabs by header shape, not tab name", () => {
   );
 });
 
+/* ------------------------------------------------------- payments gate */
+
+test("the prerendered page never reads payment data", async () => {
+  // The homepage is statically generated, so anything parsed at build time is
+  // baked into public HTML. Payment rows must only be read inside the
+  // password-checked route handler.
+  const fs = await import("node:fs/promises");
+  const stripComments = (src: string) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+
+  const page = stripComments(
+    await fs.readFile(`${import.meta.dirname}/../app/page.tsx`, "utf8"),
+  );
+
+  assert.ok(
+    !/parsePayments/.test(page),
+    "app/page.tsx must not call parsePayments — that would leak the rows into the static HTML",
+  );
+  assert.ok(/PaymentsGate/.test(page), "payments should render through the gate component");
+
+  // Imports naturally sit above everything, so compare call sites, not the
+  // import statement.
+  const route = stripComments(
+    await fs.readFile(`${import.meta.dirname}/../app/api/payments/route.ts`, "utf8"),
+  ).replace(/^import[\s\S]*?;$/gm, "");
+
+  const gateIndex = route.indexOf("matches(supplied, expected)");
+  const parseIndex = route.indexOf("parsePayments(");
+  assert.ok(gateIndex > 0, "route must compare the supplied password");
+  assert.ok(parseIndex > 0, "route must parse the payments tab");
+  assert.ok(
+    parseIndex > gateIndex,
+    "payment rows must only be parsed after the password check passes",
+  );
+  assert.ok(/timingSafeEqual/.test(route), "password comparison should be constant-time");
+});
+
+test("no password is committed to the repo", async () => {
+  const fs = await import("node:fs/promises");
+  const example = await fs.readFile(`${import.meta.dirname}/../.env.example`, "utf8");
+  assert.ok(/PAYMENTS_PASSWORD=/.test(example));
+
+  const ignore = await fs.readFile(`${import.meta.dirname}/../.gitignore`, "utf8");
+  assert.ok(/\.env\*\.local/.test(ignore), ".env.local must stay untracked");
+});
+
 test("slug makes stable anchors", () => {
   assert.equal(slug("Cannon Beach / Coast"), "cannon-beach-coast");
   assert.equal(slug("  Flights  "), "flights");

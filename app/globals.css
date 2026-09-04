@@ -624,6 +624,81 @@ table.data tr:last-child td {
   color: var(--lantern-soft);
 }
 
+/* ------------------------------------------------------------------- lock */
+
+.lock {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  max-width: 520px;
+}
+
+.lock-icon {
+  color: var(--lantern);
+  flex: none;
+  margin-top: 2px;
+}
+
+.lock-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.lock h3 {
+  font-size: 1.15rem;
+}
+
+.lock-form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lock-form input {
+  flex: 1;
+  min-width: 160px;
+  background: rgba(10, 18, 22, 0.6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--foam);
+  font: inherit;
+  font-size: 14px;
+  padding: 9px 13px;
+}
+
+.lock-form input:focus {
+  outline: none;
+  border-color: var(--moss-bright);
+}
+
+.lock-form button {
+  background: rgba(79, 125, 104, 0.24);
+  border: 1px solid rgba(111, 169, 139, 0.45);
+  border-radius: var(--radius-sm);
+  color: var(--foam);
+  font: inherit;
+  font-size: 14px;
+  padding: 9px 18px;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+
+.lock-form button:hover:not(:disabled) {
+  background: rgba(79, 125, 104, 0.38);
+}
+
+.lock-form button:disabled,
+.lock-form input:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.lock-error {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--ember);
+}
+
 /* ---------------------------------------------------------------- footer */
 
 .footer {

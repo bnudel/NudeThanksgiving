@@ -1,12 +1,12 @@
 import Atmosphere from "@/components/Atmosphere";
 import Countdown from "@/components/Countdown";
 import Haystack from "@/components/Haystack";
+import PaymentsGate from "@/components/PaymentsGate";
 import {
   ActivitiesView,
   FlightsView,
   GenericView,
   LodgingView,
-  PaymentsView,
   RestaurantsView,
   ScheduleView,
   Section,
@@ -17,7 +17,6 @@ import {
   parseFlights,
   parseGeneric,
   parseLodging,
-  parsePayments,
   parseRestaurants,
   parseSchedule,
   slug,
@@ -95,10 +94,13 @@ function renderTab({
       );
     }
     case "payments": {
-      const items = parsePayments(tab);
+      // Deliberately no parsePayments here: this page is statically
+      // prerendered, so anything read at build time ends up in the public
+      // HTML. The rows are fetched only after /api/payments accepts the
+      // password.
       return (
-        <Section key={id} id={id} title={tabName} count={`${items.length} entries`}>
-          <PaymentsView items={items} />
+        <Section key={id} id={id} title={tabName} count="password required">
+          <PaymentsGate />
         </Section>
       );
     }

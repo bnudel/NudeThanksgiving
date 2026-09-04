@@ -46,12 +46,37 @@ Root directory: this folder. No build settings to change.
 
 | Variable | Default | What it does |
 | --- | --- | --- |
+| `PAYMENTS_PASSWORD` | *(none — required)* | Unlocks the Payments section |
 | `SHEET_PUB_ID` | the published `2PACX-…` id | Where the data is read from |
 | `SHEET_ID` | the `/edit` sheet id | Only used for the "edit the spreadsheet" link |
 | `SHEET_REVALIDATE` | `300` | Seconds between re-reads of the sheet |
 | `SITE_URL` | `http://localhost:3000` | Where `/api/refresh` redirects back to |
 
 Set `SITE_URL` to your Vercel domain after the first deploy.
+
+## The Payments password
+
+Set `PAYMENTS_PASSWORD` in **Vercel → Project Settings → Environment Variables**
+(all three environments), and in `.env.local` for local dev. Never commit it —
+`.env.local` is gitignored and `.env.example` holds only a placeholder.
+
+How it works: the homepage is statically prerendered, so any payment data read
+at build time would be sitting in the public HTML for anyone to view-source.
+Instead the Payments section renders a locked card with no data in it. The rows
+are fetched from `/api/payments` only after that route verifies the password
+server-side, using a constant-time comparison, with a per-minute attempt limit.
+A correct password is remembered for the browser tab (`sessionStorage`), so
+people don't retype it while browsing.
+
+**What this does and doesn't protect.** It stops anyone with the site link from
+seeing payment amounts. It does *not* hide them from someone who has the
+published `2PACX-…` spreadsheet URL — publishing to the web makes every tab
+readable at that address, and no site-side gate can change that. If that
+matters later, the fix is to move Payments into its own unpublished
+spreadsheet read through a Google service account.
+
+To change the password, update the Vercel variable and redeploy. To revoke
+access from someone, changing it is the only lever — there are no accounts.
 
 ## Keeping Next.js patched
 
