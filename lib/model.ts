@@ -347,7 +347,27 @@ export function isCoastBound(activity: Activity): boolean {
   return COASTAL.test(activity.location) || COASTAL.test(activity.name);
 }
 
-export type ActivitySection = { tab: Tab; activities: Activity[] };
+/** Which of the two things-to-do lists this is. */
+export type ActivityRole = "coast" | "inland" | "other";
+
+export type ActivitySection = {
+  tab: Tab;
+  activities: Activity[];
+  role: ActivityRole;
+  /** What to show on the toggle button. */
+  label: string;
+};
+
+const ROLE_LABELS: Record<ActivityRole, string> = {
+  coast: "Cannon Beach",
+  inland: "Portland",
+  other: "",
+};
+
+/** Prefer a place name we're confident about; fall back to the sheet's tab name. */
+export function labelFor(tab: Tab, role: ActivityRole): string {
+  return ROLE_LABELS[role] || tab.name.trim() || "Things to do";
+}
 
 /**
  * Fold hikes into the things-to-do lists instead of giving them their own
@@ -364,31 +384,47 @@ export function mergeActivityTabs(activityTabs: Tab[]): {
   const hikeTabs = activityTabs.filter(isHikeTab);
   const listTabs = activityTabs.filter((t) => !isHikeTab(t));
 
+  const listOrAll = listTabs.length ? listTabs : activityTabs;
+
+  // Decide which list is the coastal one from its contents, so tab names
+  // don't have to spell it out.
+  const scored = listOrAll.map((tab) => ({ tab, score: coastAffinity(tab) }));
+  const coastTab =
+    listOrAll.length > 1
+      ? scored.reduce((best, cur) => (cur.score > best.score ? cur : best)).tab
+      : scored[0]?.score > 0
+        ? scored[0].tab
+        : null;
+  const inlandTab =
+    listOrAll.length > 1
+      ? scored.reduce((best, cur) => (cur.score < best.score ? cur : best)).tab
+      : coastTab
+        ? null
+        : (listOrAll[0] ?? null);
+
+  const roleOf = (tab: Tab): ActivityRole =>
+    tab === coastTab ? "coast" : tab === inlandTab ? "inland" : "other";
+
   // Nothing to fold into, or nothing to fold: render each tab as it comes.
   if (!hikeTabs.length || !listTabs.length) {
     return {
-      sections: activityTabs.map((tab) => ({ tab, activities: parseActivities(tab) })),
+      sections: activityTabs.map((tab) => {
+        const role = roleOf(tab);
+        return { tab, activities: parseActivities(tab), role, label: labelFor(tab, role) };
+      }),
       absorbed: [],
     };
   }
 
   const hikes = hikeTabs.flatMap(parseActivities);
-  const scored = listTabs.map((tab) => ({ tab, score: coastAffinity(tab) }));
-  const coastTab =
-    listTabs.length > 1
-      ? scored.reduce((best, cur) => (cur.score > best.score ? cur : best)).tab
-      : null;
-  const inlandTab =
-    listTabs.length > 1
-      ? scored.reduce((best, cur) => (cur.score < best.score ? cur : best)).tab
-      : listTabs[0];
 
   const sections = listTabs.map((tab) => {
     const own = parseActivities(tab);
     let extra: Activity[] = [];
     if (tab === coastTab) extra = hikes.filter(isCoastBound);
     else if (tab === inlandTab) extra = hikes.filter((h) => !isCoastBound(h));
-    return { tab, activities: [...own, ...extra] };
+    const role = roleOf(tab);
+    return { tab, activities: [...own, ...extra], role, label: labelFor(tab, role) };
   });
 
   return { sections, absorbed: hikeTabs };

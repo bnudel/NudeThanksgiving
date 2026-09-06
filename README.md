@@ -134,10 +134,18 @@ Portland tab (six) share one layout.
 
 ### Things to do, and the Hikes tab
 
-The site shows exactly two things-to-do sections. The Hikes tab stays in the
-spreadsheet — it's still the easiest place to collect them — but it doesn't get
-a section of its own. Its rows are appended to the two lists and marked with a
-mountain icon and a "Hike" pill.
+There is **one** "Things to do" section with a toggle between **Cannon Beach**
+and **Portland**, each button showing its count. Both panels stay in the page
+markup (the inactive one is `hidden`), so browser find still reaches every
+entry and the content is there without JavaScript.
+
+The toggle labels come from the detected role, not from the tab names — so the
+buttons read "Cannon Beach" and "Portland" whatever the tabs are called. A
+third things-to-do tab would get a third button labelled with its tab name.
+
+The Hikes tab stays in the spreadsheet — it's still the easiest place to
+collect them — but it doesn't get a section of its own. Its rows are appended
+to the lists and marked with a mountain icon and a "Hike" pill.
 
 Which list a hike lands in:
 

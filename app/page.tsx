@@ -1,9 +1,9 @@
 import Atmosphere from "@/components/Atmosphere";
 import Countdown from "@/components/Countdown";
+import ActivityTabs, { type ActivityList } from "@/components/ActivityTabs";
 import Haystack from "@/components/Haystack";
 import PaymentsGate from "@/components/PaymentsGate";
 import {
-  ActivitiesView,
   FlightsView,
   GenericView,
   LodgingView,
@@ -34,40 +34,56 @@ export const revalidate = 300;
  * Activity tabs get a merge pass first: the hikes tab is folded into the
  * things-to-do lists rather than becoming a third section of its own.
  */
-function buildIndex(tabs: Tab[]) {
+type Entry = {
+  tab: Tab;
+  kind: TabKind;
+  title: string;
+  id: string;
+  /** Set only on the single combined "Things to do" entry. */
+  lists?: ActivityList[];
+};
+
+function buildIndex(tabs: Tab[]): Entry[] {
   const kinds = new Map<Tab, TabKind>(tabs.map((t) => [t, classify(t)]));
   const { sections, absorbed } = mergeActivityTabs(
     tabs.filter((t) => kinds.get(t) === "activities"),
   );
-  const activitiesFor = new Map(sections.map((s) => [s.tab, s.activities]));
   const absorbedTabs = new Set(absorbed);
 
+  const lists: ActivityList[] = sections.map((s) => ({
+    id: slug(s.label),
+    label: s.label,
+    items: s.activities,
+  }));
+
   const used = new Map<string, number>();
-  return tabs
-    .filter((tab) => !absorbedTabs.has(tab))
-    .map((tab) => {
-      const kind = kinds.get(tab)!;
-      const title = titleFor(tab, kind);
-      const base = slug(title);
-      const n = (used.get(base) ?? 0) + 1;
-      used.set(base, n);
-      return {
-        tab,
-        kind,
-        title,
-        id: n === 1 ? base : `${base}-${n}`,
-        activities: activitiesFor.get(tab),
-      };
-    });
+  const entries: Entry[] = [];
+  let placedActivities = false;
+
+  for (const tab of tabs) {
+    if (absorbedTabs.has(tab)) continue;
+    const kind = kinds.get(tab)!;
+
+    // Every things-to-do list shares one section with a toggle, placed where
+    // the first of them appeared in the sheet.
+    if (kind === "activities") {
+      if (placedActivities) continue;
+      placedActivities = true;
+      entries.push({ tab, kind, title: "Things to do", id: "things-to-do", lists });
+      continue;
+    }
+
+    const title = titleFor(tab, kind);
+    const base = slug(title);
+    const n = (used.get(base) ?? 0) + 1;
+    used.set(base, n);
+    entries.push({ tab, kind, title, id: n === 1 ? base : `${base}-${n}` });
+  }
+
+  return entries;
 }
 
-function renderTab({
-  tab,
-  kind,
-  title,
-  id,
-  activities,
-}: ReturnType<typeof buildIndex>[number]) {
+function renderTab({ tab, kind, title, id, lists }: Entry) {
   const tabName = title;
   switch (kind) {
     case "schedule": {
@@ -102,16 +118,17 @@ function renderTab({
       );
     }
     case "activities": {
-      const items = activities ?? parseActivities(tab);
-      const hikes = items.filter((a) => a.isHike).length;
+      const all = lists ?? [{ id, label: tabName, items: parseActivities(tab) }];
+      // With two or more lists the toggle buttons carry their own counts.
+      const single = all.length === 1 ? all[0] : null;
       return (
         <Section
           key={id}
           id={id}
           title={tabName}
-          count={hikes ? `${items.length} ideas · ${hikes} hikes` : `${items.length} ideas`}
+          count={single ? `${single.items.length} ideas` : undefined}
         >
-          <ActivitiesView items={items} />
+          <ActivityTabs lists={all} />
         </Section>
       );
     }

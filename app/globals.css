@@ -603,6 +603,66 @@ main {
   font-size: 12.5px;
 }
 
+/* --------------------------------------------------------------- switch */
+
+.switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 22px;
+  background: rgba(10, 18, 22, 0.5);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.switch::-webkit-scrollbar {
+  display: none;
+}
+
+.switch-btn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  color: var(--ink-dim);
+  font: inherit;
+  font-size: 14px;
+  padding: 9px 18px;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+}
+
+.switch-btn:hover {
+  color: var(--foam);
+}
+
+.switch-btn.is-active {
+  background: rgba(79, 125, 104, 0.3);
+  color: var(--foam);
+  box-shadow: inset 0 0 0 1px rgba(111, 169, 139, 0.4);
+}
+
+.switch-btn:focus-visible {
+  outline: 2px solid var(--moss-bright);
+  outline-offset: 2px;
+}
+
+.switch-count {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.switch-btn.is-active .switch-count {
+  color: var(--moss-bright);
+}
+
 /* ------------------------------------------------------------ activities */
 
 .act {

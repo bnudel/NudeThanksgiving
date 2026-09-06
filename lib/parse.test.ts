@@ -508,6 +508,45 @@ test("with only one things-to-do list, all hikes go there", () => {
   assert.equal(absorbed.length, 1);
 });
 
+test("each list gets a place label for the toggle button", () => {
+  const { sections } = mergeActivityTabs([COAST_TAB, PORTLAND_TAB, hikesTab()]);
+  assert.deepEqual(
+    sections.map((s) => [s.role, s.label]),
+    [
+      ["coast", "Cannon Beach"],
+      ["inland", "Portland"],
+    ],
+    "labels come from the detected role, not the sheet's tab names",
+  );
+});
+
+test("toggle labels survive unhelpful tab names", () => {
+  const { sections } = mergeActivityTabs([
+    { ...COAST_TAB, name: "Sheet 3" },
+    { ...PORTLAND_TAB, name: "Sheet 4" },
+    hikesTab(),
+  ]);
+  assert.deepEqual(sections.map((s) => s.label), ["Cannon Beach", "Portland"]);
+});
+
+test("a third list keeps its own tab name as its label", () => {
+  const extra = {
+    gid: "13",
+    name: "Rainy day backups",
+    rows: parseGrid(
+      page([
+        row(td("s1", "Things to do") + td("s1", "Location") + td("s1", "Notes")),
+        row(td("s0", "Movie theatre") + td("s0", "") + td("s0", "")),
+      ]),
+    ),
+  };
+  const { sections } = mergeActivityTabs([COAST_TAB, PORTLAND_TAB, extra, hikesTab()]);
+  const third = sections.find((s) => s.tab.name === "Rainy day backups")!;
+  assert.equal(third.role, "other");
+  assert.equal(third.label, "Rainy day backups");
+  assert.equal(third.activities.filter((a) => a.isHike).length, 0, "extra lists get no hikes");
+});
+
 test("with no hikes tab, the lists are left alone", () => {
   const { sections, absorbed } = mergeActivityTabs([COAST_TAB, PORTLAND_TAB]);
   assert.equal(sections.length, 2);
