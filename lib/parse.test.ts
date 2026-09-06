@@ -4,7 +4,9 @@ import { test } from "node:test";
 import { normalizeColor, parseGrid, parseStyles, parseTabIndex, unwrapHref } from "./parse.ts";
 import {
   classify,
+  coastAffinity,
   countStays,
+  mergeActivityTabs,
   nameFromUrl,
   parseActivities,
   parseFlights,
@@ -394,6 +396,123 @@ test("activity columns are read by name, not position", () => {
     [al.location, al.needsReservation, al.when, al.rank, al.notes],
     ["Vancouver", "Yes", "11/28 7pm", "2", "Bowling"],
   );
+});
+
+/* --------------------------------------------- folding hikes into the lists */
+
+const COAST_TAB = {
+  gid: "10",
+  name: "Cannon Beach",
+  rows: parseGrid(
+    page([
+      row(td("s1", "Things to do") + td("s1", "Location") + td("s1", "Notes")),
+      row(td("s0", "Cannon Beach") + td("s0", "") + td("s0", "")),
+      row(td("s0", "Seaside pier") + td("s0", "") + td("s0", "")),
+      row(td("s0", "Hug Point") + td("s0", "") + td("s0", "Best at low tide")),
+      row(td("s0", "Rockaway Beach") + td("s0", "") + td("s0", "Twin rocks")),
+      row(td("s0", "Tillamook tour") + td("s0", "") + td("s0", "1.5 hours")),
+    ]),
+  ),
+};
+
+const PORTLAND_TAB = {
+  gid: "11",
+  name: "Portland",
+  rows: parseGrid(
+    page([
+      row(td("s1", "Things to do") + td("s1", "Location") + td("s1", "Notes")),
+      row(td("s0", "Japanese Garden") + td("s0", "Portland") + td("s0", "")),
+      row(td("s0", "Portland Aerial Tram") + td("s0", "") + td("s0", "")),
+      row(td("s0", "Big Al's Vancouver") + td("s0", "Vancouver") + td("s0", "")),
+    ]),
+  ),
+};
+
+const hikesTab = (locations: string[] = ["", "", ""]) => ({
+  gid: "12",
+  name: "Hikes",
+  rows: parseGrid(
+    page([
+      row(td("s1", "Hike Name") + td("s1", "Location") + td("s1", "Notes")),
+      row(td("s0", "Multnomah Falls") + td("s0", locations[0]) + td("s0", "1.2 miles up")),
+      row(td("s0", "Latourell Falls") + td("s0", locations[1]) + td("s0", "200 ft walk")),
+      row(td("s0", "Silver Falls state park") + td("s0", locations[2]) + td("s0", "7.6 mile loop")),
+    ]),
+  ),
+});
+
+test("the hikes tab is absorbed rather than becoming a third section", () => {
+  const { sections, absorbed } = mergeActivityTabs([COAST_TAB, PORTLAND_TAB, hikesTab()]);
+
+  assert.equal(sections.length, 2, "exactly two things-to-do sections remain");
+  assert.deepEqual(
+    sections.map((s) => s.tab.name),
+    ["Cannon Beach", "Portland"],
+  );
+  assert.deepEqual(absorbed.map((t) => t.name), ["Hikes"], "the hikes tab is reported as absorbed");
+});
+
+test("hikes default to the Portland list and are tagged", () => {
+  const { sections } = mergeActivityTabs([COAST_TAB, PORTLAND_TAB, hikesTab()]);
+  const coast = sections.find((s) => s.tab.name === "Cannon Beach")!;
+  const pdx = sections.find((s) => s.tab.name === "Portland")!;
+
+  assert.equal(coast.activities.filter((a) => a.isHike).length, 0);
+  assert.equal(pdx.activities.filter((a) => a.isHike).length, 3);
+
+  assert.ok(
+    pdx.activities.slice(0, 3).every((a) => !a.isHike),
+    "the tab's own entries keep their order, hikes are appended",
+  );
+  assert.equal(pdx.activities.at(-1)?.name, "Silver Falls state park");
+  assert.equal(pdx.activities.at(-1)?.notes, "7.6 mile loop", "hike notes survive the merge");
+});
+
+test("a Location naming the coast moves that hike to the coast list", () => {
+  const { sections } = mergeActivityTabs([
+    COAST_TAB,
+    PORTLAND_TAB,
+    hikesTab(["", "Cannon Beach", ""]),
+  ]);
+  const coast = sections.find((s) => s.tab.name === "Cannon Beach")!;
+  const pdx = sections.find((s) => s.tab.name === "Portland")!;
+
+  assert.deepEqual(
+    coast.activities.filter((a) => a.isHike).map((a) => a.name),
+    ["Latourell Falls"],
+  );
+  assert.equal(pdx.activities.filter((a) => a.isHike).length, 2);
+});
+
+test("the coast list is identified by content, not by tab name", () => {
+  // Tab names the sheet might not spell helpfully.
+  const vague = { ...COAST_TAB, name: "Tab 3" };
+  const alsoVague = { ...PORTLAND_TAB, name: "Tab 4" };
+  assert.ok(
+    coastAffinity(vague) > coastAffinity(alsoVague),
+    "the coastal tab scores higher on coastal place names",
+  );
+
+  const { sections } = mergeActivityTabs([vague, alsoVague, hikesTab(["Seaside", "", ""])]);
+  const coast = sections.find((s) => s.tab.name === "Tab 3")!;
+  assert.deepEqual(
+    coast.activities.filter((a) => a.isHike).map((a) => a.name),
+    ["Multnomah Falls"],
+  );
+});
+
+test("with only one things-to-do list, all hikes go there", () => {
+  const { sections, absorbed } = mergeActivityTabs([PORTLAND_TAB, hikesTab()]);
+  assert.equal(sections.length, 1);
+  assert.equal(sections[0].activities.filter((a) => a.isHike).length, 3);
+  assert.equal(absorbed.length, 1);
+});
+
+test("with no hikes tab, the lists are left alone", () => {
+  const { sections, absorbed } = mergeActivityTabs([COAST_TAB, PORTLAND_TAB]);
+  assert.equal(sections.length, 2);
+  assert.equal(absorbed.length, 0);
+  assert.ok(sections.every((s) => s.activities.every((a) => !a.isHike)));
 });
 
 test("a Hikes tab renders as an activity list", () => {

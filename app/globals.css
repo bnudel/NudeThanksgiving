@@ -618,6 +618,19 @@ main {
 .act-name {
   font-size: 15.5px;
   color: var(--foam);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.hike-mark {
+  color: var(--moss-bright);
+  flex: none;
+}
+
+.act-hike {
+  border-left: 2px solid rgba(111, 169, 139, 0.4);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
 .act-notes {

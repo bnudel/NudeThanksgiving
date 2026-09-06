@@ -14,6 +14,7 @@ import {
 import {
   classify,
   countStays,
+  mergeActivityTabs,
   parseActivities,
   parseFlights,
   parseGeneric,
@@ -22,22 +23,42 @@ import {
   parseSchedule,
   slug,
   titleFor,
+  type TabKind,
 } from "@/lib/model";
 import { EDIT_URL, fetchWorkbook, REVALIDATE, type Tab } from "@/lib/sheet";
 
 export const revalidate = 300;
 
-/** Section titles and anchors, deduplicated so two similar tabs can't collide. */
+/**
+ * Section titles and anchors, deduplicated so two similar tabs can't collide.
+ * Activity tabs get a merge pass first: the hikes tab is folded into the
+ * things-to-do lists rather than becoming a third section of its own.
+ */
 function buildIndex(tabs: Tab[]) {
+  const kinds = new Map<Tab, TabKind>(tabs.map((t) => [t, classify(t)]));
+  const { sections, absorbed } = mergeActivityTabs(
+    tabs.filter((t) => kinds.get(t) === "activities"),
+  );
+  const activitiesFor = new Map(sections.map((s) => [s.tab, s.activities]));
+  const absorbedTabs = new Set(absorbed);
+
   const used = new Map<string, number>();
-  return tabs.map((tab) => {
-    const kind = classify(tab);
-    const title = titleFor(tab, kind);
-    const base = slug(title);
-    const n = (used.get(base) ?? 0) + 1;
-    used.set(base, n);
-    return { tab, kind, title, id: n === 1 ? base : `${base}-${n}` };
-  });
+  return tabs
+    .filter((tab) => !absorbedTabs.has(tab))
+    .map((tab) => {
+      const kind = kinds.get(tab)!;
+      const title = titleFor(tab, kind);
+      const base = slug(title);
+      const n = (used.get(base) ?? 0) + 1;
+      used.set(base, n);
+      return {
+        tab,
+        kind,
+        title,
+        id: n === 1 ? base : `${base}-${n}`,
+        activities: activitiesFor.get(tab),
+      };
+    });
 }
 
 function renderTab({
@@ -45,6 +66,7 @@ function renderTab({
   kind,
   title,
   id,
+  activities,
 }: ReturnType<typeof buildIndex>[number]) {
   const tabName = title;
   switch (kind) {
@@ -80,9 +102,15 @@ function renderTab({
       );
     }
     case "activities": {
-      const items = parseActivities(tab);
+      const items = activities ?? parseActivities(tab);
+      const hikes = items.filter((a) => a.isHike).length;
       return (
-        <Section key={id} id={id} title={tabName} count={`${items.length} ideas`}>
+        <Section
+          key={id}
+          id={id}
+          title={tabName}
+          count={hikes ? `${items.length} ideas · ${hikes} hikes` : `${items.length} ideas`}
+        >
           <ActivitiesView items={items} />
         </Section>
       );

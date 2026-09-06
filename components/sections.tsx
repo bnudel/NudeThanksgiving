@@ -233,6 +233,25 @@ export function FlightsView({ travelers }: { travelers: Traveler[] }) {
 
 /* ---------------------------------------------------------------- activities */
 
+/** Mountain marker for entries that came from the hikes list. */
+function HikeMark() {
+  return (
+    <svg
+      className="hike-mark"
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3 19 L9.5 7.5 L13 13.5 L15 10 L21 19 Z" />
+    </svg>
+  );
+}
+
 export function ActivitiesView({ items }: { items: Activity[] }) {
   if (!items.length) return <Empty>Nothing on this list yet.</Empty>;
   return (
@@ -240,8 +259,9 @@ export function ActivitiesView({ items }: { items: Activity[] }) {
       {items.map((a, i) => {
         const needs = /^(y|yes|true)/i.test(a.needsReservation);
         return (
-          <div className="act" key={i}>
+          <div className={`act${a.isHike ? " act-hike" : ""}`} key={i}>
             <div className="act-name">
+              {a.isHike && <HikeMark />}
               {a.href ? (
                 <a href={a.href} target="_blank" rel="noreferrer">
                   {a.name}
@@ -250,8 +270,9 @@ export function ActivitiesView({ items }: { items: Activity[] }) {
                 a.name
               )}
             </div>
-            {(a.location || a.rank || needs || a.when) && (
+            {(a.location || a.rank || needs || a.when || a.isHike) && (
               <div className="stay-meta" style={{ marginTop: 2 }}>
+                {a.isHike && <span className="pill good">Hike</span>}
                 {a.location && <span className="pill">{a.location}</span>}
                 {a.rank && <span className="pill good">Rank {a.rank}</span>}
                 {needs && <span className="pill warn">Reservation needed</span>}

@@ -279,7 +279,15 @@ export type Activity = {
   rank: string;
   notes: string;
   href?: string;
+  /** Came from a hikes tab — rendered with a mountain marker. */
+  isHike: boolean;
 };
+
+/** A tab whose rows are hikes rather than a general things-to-do list. */
+export function isHikeTab(tab: Tab): boolean {
+  const header = findHeaderRow(tab.rows);
+  return !!header && rowHas(header, "Hike Name");
+}
 
 /**
  * Columns are read by heading, so the coast tab (Things to do / Location /
@@ -297,6 +305,8 @@ export function parseActivities(tab: Tab): Activity[] {
     columns[norm("Name")] ??
     0;
 
+  const hike = isHikeTab(tab);
+
   return tab.rows
     .slice(i + 1)
     .filter((r) => txt(r, nameAt))
@@ -308,7 +318,80 @@ export function parseActivities(tab: Tab): Activity[] {
       rank: col(r, columns, "Rank of Importance", "Rank", "Priority"),
       notes: col(r, columns, "Notes"),
       href: r[nameAt]?.href ?? colCell(r, columns, "Notes")?.href,
+      isHike: hike,
     }));
+}
+
+/* ------------------------------------------------- merging the hikes tab */
+
+const COASTAL = /cannon|seaside|coast|manzanita|rockaway|tillamook|tillamoolk|nehalem|hug point|wheeler|ecola|short sand|oceanside|astoria/i;
+const INLAND = /portland|pdx|vancouver|gorge|columbia|hillsboro|beaverton|multnomah|silver falls|willamette/i;
+
+/**
+ * How coastal a things-to-do tab looks, judged from its contents rather than
+ * its tab name — the sheet's tab names aren't guaranteed to say "Cannon Beach".
+ * Positive means coast, negative means Portland.
+ */
+export function coastAffinity(tab: Tab): number {
+  const text = [tab.name, ...tab.rows.flatMap((r) => r.map((c) => c.text))].join(" \n ");
+  const count = (re: RegExp) => (text.match(new RegExp(re.source, "gi")) ?? []).length;
+  return count(COASTAL) - count(INLAND);
+}
+
+/**
+ * A hike belongs on the coast list if its Location says so — or if its own
+ * name is unmistakably coastal, since the hikes tab has no Location column
+ * today and "Ecola" or "Short Sand" shouldn't need one.
+ */
+export function isCoastBound(activity: Activity): boolean {
+  return COASTAL.test(activity.location) || COASTAL.test(activity.name);
+}
+
+export type ActivitySection = { tab: Tab; activities: Activity[] };
+
+/**
+ * Fold hikes into the things-to-do lists instead of giving them their own
+ * section. Hikes default to the most Portland-ish list; putting "Cannon Beach"
+ * or "Coast" in a hike's Location cell moves it to the coast list.
+ *
+ * Returns the sections to render plus the tabs that were absorbed, so the
+ * caller can drop them from the page and the nav.
+ */
+export function mergeActivityTabs(activityTabs: Tab[]): {
+  sections: ActivitySection[];
+  absorbed: Tab[];
+} {
+  const hikeTabs = activityTabs.filter(isHikeTab);
+  const listTabs = activityTabs.filter((t) => !isHikeTab(t));
+
+  // Nothing to fold into, or nothing to fold: render each tab as it comes.
+  if (!hikeTabs.length || !listTabs.length) {
+    return {
+      sections: activityTabs.map((tab) => ({ tab, activities: parseActivities(tab) })),
+      absorbed: [],
+    };
+  }
+
+  const hikes = hikeTabs.flatMap(parseActivities);
+  const scored = listTabs.map((tab) => ({ tab, score: coastAffinity(tab) }));
+  const coastTab =
+    listTabs.length > 1
+      ? scored.reduce((best, cur) => (cur.score > best.score ? cur : best)).tab
+      : null;
+  const inlandTab =
+    listTabs.length > 1
+      ? scored.reduce((best, cur) => (cur.score < best.score ? cur : best)).tab
+      : listTabs[0];
+
+  const sections = listTabs.map((tab) => {
+    const own = parseActivities(tab);
+    let extra: Activity[] = [];
+    if (tab === coastTab) extra = hikes.filter(isCoastBound);
+    else if (tab === inlandTab) extra = hikes.filter((h) => !isCoastBound(h));
+    return { tab, activities: [...own, ...extra] };
+  });
+
+  return { sections, absorbed: hikeTabs };
 }
 
 /* --------------------------------------------------------------- restaurants */

@@ -118,9 +118,9 @@ renaming a tab won't break anything:
 | --- | --- |
 | `Day` + `Summary` | Day-by-day schedule with colour-coded event badges |
 | `Dates` + `Cancel policy` | Lodging options, grouped under location headings |
-| `Hike Name` | Activity cards (same layout as a things-to-do tab) |
 | `Name` + `Arrival Day` / `Depart Day` | Per-person flight cards, arrivals + departures merged |
 | `Things to do` | Activity cards with rank, reservation flag, notes |
+| `Hike Name` | Folded into the things-to-do lists, tagged as a hike |
 | `Date` + `What` + `How Much` | Payments table |
 | `Name` + `Location` + `Notes` | Restaurant cards (name inferred from the link if blank) |
 | anything else | A plain styled table |
@@ -131,6 +131,30 @@ as a table. If you want it styled specially, tell Claude what the tab is.
 **Columns are matched by heading, not position.** Add, remove or reorder a
 column in any tab and the site follows — the coast tab (three columns) and the
 Portland tab (six) share one layout.
+
+### Things to do, and the Hikes tab
+
+The site shows exactly two things-to-do sections. The Hikes tab stays in the
+spreadsheet — it's still the easiest place to collect them — but it doesn't get
+a section of its own. Its rows are appended to the two lists and marked with a
+mountain icon and a "Hike" pill.
+
+Which list a hike lands in:
+
+1. If its **Location** cell names a coastal place ("Cannon Beach", "Seaside",
+   "Coast", "Manzanita"…), it goes to the coast list.
+2. Otherwise, if the **hike's own name** is unmistakably coastal ("Ecola",
+   "Short Sand"), it goes to the coast list. The Hikes tab has no Location
+   column today, so this is what makes the rule usable without editing it.
+3. Otherwise it goes to the Portland list — where all seven Gorge hikes
+   currently land.
+
+Which list counts as "the coast one" is decided by scanning each tab's contents
+for coastal versus inland place names, not by its tab name — so renaming a tab
+won't misroute anything.
+
+Adding a third things-to-do tab is fine; it just won't receive hikes. Deleting
+the Hikes tab is also fine — the two lists carry on unchanged.
 
 ### Lodging
 
