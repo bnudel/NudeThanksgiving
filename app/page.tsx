@@ -13,6 +13,7 @@ import {
 } from "@/components/sections";
 import {
   classify,
+  countStays,
   parseActivities,
   parseFlights,
   parseGeneric,
@@ -56,10 +57,11 @@ function renderTab({
       );
     }
     case "lodging": {
-      const stays = parseLodging(tab);
+      const groups = parseLodging(tab);
+      const total = countStays(groups);
       return (
-        <Section key={id} id={id} title={tabName} count={`${stays.length} stays`}>
-          <LodgingView stays={stays} />
+        <Section key={id} id={id} title={tabName} count={`${total} options`}>
+          <LodgingView groups={groups} />
         </Section>
       );
     }

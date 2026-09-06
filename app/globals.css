@@ -176,9 +176,17 @@ h3 {
 }
 
 .hero h1 {
-  font-size: clamp(2.6rem, 8vw, 5.2rem);
-  line-height: 1.02;
+  /* Sized for "Nudelman/Veldran" — long enough that the old 5.2rem max
+     wrapped mid-name on phones. */
+  font-size: clamp(2.1rem, 6.4vw, 4.2rem);
+  line-height: 1.04;
   text-shadow: 0 6px 40px rgba(0, 0, 0, 0.6);
+  overflow-wrap: break-word;
+}
+
+.hero h1 .slash {
+  color: var(--moss-bright);
+  padding: 0 0.06em;
 }
 
 .hero h1 em {
@@ -516,6 +524,42 @@ main {
 }
 
 /* --------------------------------------------------------------- lodging */
+
+.lodging {
+  display: flex;
+  flex-direction: column;
+  gap: 34px;
+}
+
+.group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.group-head h3 {
+  font-size: 1.3rem;
+  color: var(--mist);
+}
+
+.group-head .count {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.stay-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.stay.stay-booked {
+  border-color: rgba(111, 169, 139, 0.5);
+}
 
 .stay-dates {
   font-family: var(--serif);

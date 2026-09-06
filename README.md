@@ -1,4 +1,4 @@
-# Nudelman Thanksgiving 2026
+# Nudelman/Veldran Thanksgiving 2026
 
 A rainy-Oregon-coast trip site that reads a Google Sheet as its database.
 Every tab in the spreadsheet becomes a section on the page — when someone fills
@@ -117,7 +117,8 @@ renaming a tab won't break anything:
 | Header row contains | Rendered as |
 | --- | --- |
 | `Day` + `Summary` | Day-by-day schedule with colour-coded event badges |
-| `Dates` + `Cancel policy` | Lodging cards with cost, cancel-by date, map link |
+| `Dates` + `Cancel policy` | Lodging options, grouped under location headings |
+| `Hike Name` | Activity cards (same layout as a things-to-do tab) |
 | `Name` + `Arrival Day` / `Depart Day` | Per-person flight cards, arrivals + departures merged |
 | `Things to do` | Activity cards with rank, reservation flag, notes |
 | `Date` + `What` + `How Much` | Payments table |
@@ -126,6 +127,21 @@ renaming a tab won't break anything:
 
 That last row matters: **a brand-new tab you add later will still render**, just
 as a table. If you want it styled specially, tell Claude what the tab is.
+
+**Columns are matched by heading, not position.** Add, remove or reorder a
+column in any tab and the site follows — the coast tab (three columns) and the
+Portland tab (six) share one layout.
+
+### Lodging
+
+Structure the tab as: a location name alone on a row, a header row, then one
+row per option with its label (`Option 1`, `Option 2`…) in the blank column to
+the left of `Dates`. Repeat for each location. A flat sheet with a single
+header and no location headings also works.
+
+Add a **`Status`** column and put `Booked` in it to mark the option you chose —
+it gets a badge and the group header switches from "3 options" to "booked". A
+cost containing the word "paid" shows a Paid badge automatically.
 
 ### Schedule colours
 

@@ -4,6 +4,7 @@ import type {
   Activity,
   GenericTable,
   LegendEntry,
+  LodgingGroup,
   Payment,
   Restaurant,
   Schedule,
@@ -126,28 +127,60 @@ export function ScheduleView({ schedule }: { schedule: Schedule }) {
 
 /* ------------------------------------------------------------------- lodging */
 
-export function LodgingView({ stays }: { stays: Stay[] }) {
-  if (!stays.length) return <Empty>No lodging entered yet.</Empty>;
+function isBooked(s: Stay): boolean {
+  return /^(booked|yes|confirmed|y|x|✓)/i.test(s.status.trim());
+}
+
+export function LodgingView({ groups }: { groups: LodgingGroup[] }) {
+  if (!groups.length) return <Empty>No lodging entered yet.</Empty>;
+
   return (
-    <div className="grid two">
-      {stays.map((s, i) => {
-        const address = s.location.split(/,?\s*(?:near|Renewed|Check-in)/i)[0].trim();
+    <div className="lodging">
+      {groups.map((group, gi) => {
+        const decided = group.stays.some(isBooked);
         return (
-          <div className="card" key={i}>
-            <div className="kicker">{s.acct || "Stay"}</div>
-            <div className="stay-dates">{s.dates}</div>
-            <div className="stay-loc">{s.location}</div>
-            <div className="stay-meta">
-              {s.cost && <span className="pill good">{s.cost}</span>}
-              {s.cancel && <span className="pill warn">{s.cancel}</span>}
-            </div>
-            {address && (
-              <p className="map-link" style={{ marginBottom: 0 }}>
-                <a href={mapsUrl(address)} target="_blank" rel="noreferrer">
-                  Open in Maps &rarr;
-                </a>
-              </p>
+          <div className="lodging-group" key={gi}>
+            {group.name && (
+              <div className="group-head">
+                <h3>{group.name}</h3>
+                <span className="count">
+                  {decided
+                    ? "booked"
+                    : `${group.stays.length} option${group.stays.length === 1 ? "" : "s"}`}
+                </span>
+              </div>
             )}
+            <div className="grid two">
+              {group.stays.map((s, i) => {
+                const address = s.location
+                  .split(/,?\s*(?:near|Renewed|Check-in)/i)[0]
+                  .trim();
+                const booked = isBooked(s);
+                return (
+                  <div className={`card stay${booked ? " stay-booked" : ""}`} key={i}>
+                    <div className="stay-head">
+                      <span className="kicker">{s.label || s.acct || "Option"}</span>
+                      {booked && <span className="pill good">Booked</span>}
+                      {!booked && s.paid && <span className="pill good">Paid</span>}
+                    </div>
+                    <div className="stay-dates">{s.dates}</div>
+                    <div className="stay-loc">{s.location}</div>
+                    <div className="stay-meta">
+                      {s.acct && s.label && <span className="pill">{s.acct}</span>}
+                      {s.cost && <span className="pill">{s.cost}</span>}
+                      {s.cancel && <span className="pill warn">{s.cancel}</span>}
+                    </div>
+                    {address && (
+                      <p className="map-link" style={{ marginBottom: 0 }}>
+                        <a href={mapsUrl(address)} target="_blank" rel="noreferrer">
+                          Open in Maps &rarr;
+                        </a>
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         );
       })}

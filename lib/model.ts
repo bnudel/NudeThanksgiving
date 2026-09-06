@@ -8,6 +8,39 @@ const rowHas = (row: Cell[], ...needles: string[]) => {
 };
 const nonEmpty = (row: Cell[]) => row.filter((c) => c.text).length;
 
+/**
+ * Map a header row to column indexes by name. Reading columns by heading
+ * rather than by position means a tab can gain, lose or reorder columns
+ * without silently shifting data into the wrong field.
+ */
+export type Columns = Record<string, number>;
+
+export function columnsOf(header: Cell[]): Columns {
+  const map: Columns = {};
+  header.forEach((cell, i) => {
+    const key = norm(cell.text);
+    if (key && !(key in map)) map[key] = i;
+  });
+  return map;
+}
+
+/** First matching column's text for this row, or "" if none of them exist. */
+function col(row: Cell[], columns: Columns, ...names: string[]): string {
+  for (const name of names) {
+    const i = columns[norm(name)];
+    if (i !== undefined) return txt(row, i);
+  }
+  return "";
+}
+
+function colCell(row: Cell[], columns: Columns, ...names: string[]): Cell | undefined {
+  for (const name of names) {
+    const i = columns[norm(name)];
+    if (i !== undefined && row[i]) return row[i];
+  }
+  return undefined;
+}
+
 export type TabKind =
   | "schedule"
   | "lodging"
@@ -26,7 +59,7 @@ export function classify(tab: Tab): TabKind {
   if (!header) return "generic";
   if (rowHas(header, "Day", "Summary")) return "schedule";
   if (rowHas(header, "Dates") && rowHas(header, "Cancel policy")) return "lodging";
-  if (rowHas(header, "Things to do")) return "activities";
+  if (rowHas(header, "Things to do") || rowHas(header, "Hike Name")) return "activities";
   if (rowHas(header, "Name") && (rowHas(header, "Arrival Day") || rowHas(header, "Depart Day")))
     return "flights";
   if (rowHas(header, "How Much")) return "payments";
@@ -124,25 +157,81 @@ export function parseSchedule(tab: Tab): Schedule {
 /* ------------------------------------------------------------------- lodging */
 
 export type Stay = {
+  /** "Option 1" and friends — the label column left of Dates. */
+  label: string;
   dates: string;
   acct: string;
   cost: string;
   location: string;
   cancel: string;
+  status: string;
+  /** The sheet says this one is already paid for. */
+  paid: boolean;
 };
 
-export function parseLodging(tab: Tab): Stay[] {
-  const i = headerIndex(tab.rows);
-  return tab.rows
-    .slice(i + 1)
-    .filter((r) => nonEmpty(r) > 0)
-    .map((r) => ({
-      dates: txt(r, 0),
-      acct: txt(r, 1),
-      cost: txt(r, 2),
-      location: txt(r, 3),
-      cancel: txt(r, 4),
-    }));
+/** Options are grouped under a location heading like "Portland". */
+export type LodgingGroup = { name: string; stays: Stay[] };
+
+const isLodgingHeader = (row: Cell[]) =>
+  rowHas(row, "Dates") && rowHas(row, "Cancel policy");
+
+/**
+ * The lodging tab is a stack of sections: a location heading on its own row,
+ * then a header row, then one row per candidate option. Sections repeat, so
+ * this walks the rows rather than assuming a single header at the top.
+ */
+export function parseLodging(tab: Tab): LodgingGroup[] {
+  const groups: LodgingGroup[] = [];
+  let columns: Columns | null = null;
+  let current: LodgingGroup | null = null;
+
+  const open = (name: string) => {
+    current = { name, stays: [] };
+    groups.push(current);
+    return current;
+  };
+
+  for (const row of tab.rows) {
+    if (!nonEmpty(row)) continue;
+
+    if (isLodgingHeader(row)) {
+      columns = columnsOf(row);
+      continue;
+    }
+
+    // A lone cell on a row is a section heading, not a booking.
+    if (nonEmpty(row) === 1) {
+      open(row.find((c) => c.text)!.text);
+      continue;
+    }
+
+    if (!columns) continue;
+    if (!current) open("");
+
+    const cost = col(row, columns, "Cost");
+    // The label column has a blank heading, so find it by position: whatever
+    // sits left of Dates.
+    const datesAt = columns[norm("Dates")] ?? 0;
+    const label = datesAt > 0 ? txt(row, datesAt - 1) : "";
+
+    current!.stays.push({
+      label,
+      dates: col(row, columns, "Dates"),
+      acct: col(row, columns, "Acct", "Account"),
+      cost,
+      location: col(row, columns, "Location", "Address"),
+      cancel: col(row, columns, "Cancel policy", "Cancellation"),
+      status: col(row, columns, "Status", "Booked", "Decision"),
+      paid: /\bpaid\b/i.test(cost),
+    });
+  }
+
+  return groups.filter((g) => g.stays.length > 0);
+}
+
+/** Total options across all groups, for the section subheading. */
+export function countStays(groups: LodgingGroup[]): number {
+  return groups.reduce((n, g) => n + g.stays.length, 0);
 }
 
 /* ------------------------------------------------------------------- flights */
@@ -192,19 +281,33 @@ export type Activity = {
   href?: string;
 };
 
+/**
+ * Columns are read by heading, so the coast tab (Things to do / Location /
+ * Notes), the Portland tab (six columns) and the Hikes tab (Hike Name /
+ * Notes) all parse correctly without special cases.
+ */
 export function parseActivities(tab: Tab): Activity[] {
   const i = headerIndex(tab.rows);
+  if (i < 0) return [];
+  const columns = columnsOf(tab.rows[i]);
+  const nameAt =
+    columns[norm("Things to do")] ??
+    columns[norm("Hike Name")] ??
+    columns[norm("Activity")] ??
+    columns[norm("Name")] ??
+    0;
+
   return tab.rows
     .slice(i + 1)
-    .filter((r) => txt(r, 0))
+    .filter((r) => txt(r, nameAt))
     .map((r) => ({
-      name: txt(r, 0),
-      location: txt(r, 1),
-      needsReservation: txt(r, 2),
-      when: txt(r, 3),
-      rank: txt(r, 4),
-      notes: txt(r, 5),
-      href: r[0]?.href ?? r[5]?.href,
+      name: txt(r, nameAt),
+      location: col(r, columns, "Location"),
+      needsReservation: col(r, columns, "Need Reservation?", "Need Reservation", "Reservation"),
+      when: col(r, columns, "Reservation Date and Time", "Date and Time", "When"),
+      rank: col(r, columns, "Rank of Importance", "Rank", "Priority"),
+      notes: col(r, columns, "Notes"),
+      href: r[nameAt]?.href ?? colCell(r, columns, "Notes")?.href,
     }));
 }
 

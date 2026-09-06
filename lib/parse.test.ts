@@ -4,7 +4,9 @@ import { test } from "node:test";
 import { normalizeColor, parseGrid, parseStyles, parseTabIndex, unwrapHref } from "./parse.ts";
 import {
   classify,
+  countStays,
   nameFromUrl,
+  parseActivities,
   parseFlights,
   parseLodging,
   parseRestaurants,
@@ -254,9 +256,66 @@ test("parseFlights merges the arrival and departure blocks per person", () => {
 
 /* ------------------------------------------------------------------ lodging */
 
-test("parseLodging maps the booking columns", () => {
+const LODGING_HEADER =
+  td("s0", "") +
+  td("s1", "Dates") +
+  td("s1", "Acct") +
+  td("s1", "Cost") +
+  td("s1", "Location") +
+  td("s1", "Cancel policy");
+
+const option = (label: string, dates: string, acct: string, cost: string, loc: string) =>
+  row(
+    td("s0", label) +
+      td("s0", dates) +
+      td("s0", acct) +
+      td("s0", cost) +
+      td("s0", loc) +
+      td("s0", "Cancel before November 16 for a full refund."),
+  );
+
+const GROUPED_LODGING = page([
+  row(td("s1", "Cannon Beach/Seaside") + blank(5)),
+  row(LODGING_HEADER),
+  option("Option 1", "11/21-24", "E Airbnb", "$904.46 paid on K Sapphire 3306", "111-119 9th Ave"),
+  option("Option 2", "11/21-24", "E Airbnb", "$880.23 will be charged", "188 East Van Buren"),
+  row(blank(6)),
+  row(td("s1", "Portland") + blank(5)),
+  row(LODGING_HEADER),
+  option("Option 1", "11/24-29", "E Airbnb", "$5588.93 will be charged", "1032 SE 12th Ave"),
+  option("Option 2", "11/24-29", "T Airbnb", "$4528.92 will be charged", "925 NE 23rd Ave"),
+  option("Option 3", "11/24-29", "E Airbnb", "5227.47 will be charged", "2034 NE Flanders St"),
+]);
+
+test("parseLodging groups options under their location headings", () => {
+  const groups = parseLodging({ gid: "2", name: "Lodging", rows: parseGrid(GROUPED_LODGING) });
+
+  assert.deepEqual(
+    groups.map((g) => [g.name, g.stays.length]),
+    [
+      ["Cannon Beach/Seaside", 2],
+      ["Portland", 3],
+    ],
+  );
+  assert.equal(countStays(groups), 5);
+
+  const first = groups[0].stays[0];
+  assert.equal(first.label, "Option 1", "the unlabelled column left of Dates is the option name");
+  assert.equal(first.dates, "11/21-24", "columns are not shifted by the label column");
+  assert.equal(first.acct, "E Airbnb");
+  assert.equal(first.paid, true, '"paid on" in the cost marks it as paid');
+  assert.equal(groups[0].stays[1].paid, false, '"will be charged" is not paid');
+});
+
+test("parseLodging still handles a flat sheet with no section headings", () => {
   const html = page([
-    row(td("s1", "Dates") + td("s1", "Acct") + td("s1", "Cost") + td("s1", "Location") + td("s1", "Cancel policy")),
+    row(
+      td("s1", "Dates") +
+        td("s1", "Acct") +
+        td("s1", "Cost") +
+        td("s1", "Location") +
+        td("s1", "Cancel policy"),
+    ),
     row(
       td("s0", "11/21-24") +
         td("s0", "E Airbnb") +
@@ -265,10 +324,94 @@ test("parseLodging maps the booking columns", () => {
         td("s0", "Cancel before November 16 for a full refund."),
     ),
   ]);
-  const stays = parseLodging({ gid: "2", name: "Lodging", rows: parseGrid(html) });
-  assert.equal(stays.length, 1);
-  assert.equal(stays[0].dates, "11/21-24");
-  assert.equal(stays[0].cancel, "Cancel before November 16 for a full refund.");
+  const groups = parseLodging({ gid: "2", name: "Lodging", rows: parseGrid(html) });
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].name, "");
+  assert.equal(groups[0].stays[0].dates, "11/21-24");
+  assert.equal(groups[0].stays[0].cancel, "Cancel before November 16 for a full refund.");
+});
+
+test("a Status column marks an option as booked", () => {
+  const html = page([
+    row(
+      td("s0", "") +
+        td("s1", "Dates") +
+        td("s1", "Acct") +
+        td("s1", "Cost") +
+        td("s1", "Location") +
+        td("s1", "Cancel policy") +
+        td("s1", "Status"),
+    ),
+    row(
+      td("s0", "Option 1") +
+        td("s0", "11/24-29") +
+        td("s0", "E Airbnb") +
+        td("s0", "$5588.93") +
+        td("s0", "1032 SE 12th") +
+        td("s0", "Cancel by Nov 19") +
+        td("s0", "Booked"),
+    ),
+  ]);
+  const groups = parseLodging({ gid: "2", name: "Lodging", rows: parseGrid(html) });
+  assert.equal(groups[0].stays[0].status, "Booked");
+});
+
+/* ------------------------------------------- activities across column sets */
+
+test("activity columns are read by name, not position", () => {
+  // The coast tab lost its reservation columns; Notes moved from column 6 to
+  // column 3. Position-based parsing silently dropped these notes.
+  const coast = page([
+    row(td("s1", "Things to do") + td("s1", "Location") + td("s1", "Notes")),
+    row(td("s0", "Hug Point") + td("s0", "") + td("s0", "Best at low tide")),
+  ]);
+  const [hug] = parseActivities({ gid: "3", name: "Coast", rows: parseGrid(coast) });
+  assert.equal(hug.name, "Hug Point");
+  assert.equal(hug.notes, "Best at low tide", "notes survive a narrower tab");
+  assert.equal(hug.needsReservation, "", "a missing column reads as empty, not as the notes");
+
+  // The Portland tab still has all six columns.
+  const pdx = page([
+    row(
+      td("s1", "Things to do") +
+        td("s1", "Location") +
+        td("s1", "Need Reservation?") +
+        td("s1", "Reservation Date and Time") +
+        td("s1", "Rank of Importance") +
+        td("s1", "Notes"),
+    ),
+    row(
+      td("s0", "Big Al's") +
+        td("s0", "Vancouver") +
+        td("s0", "Yes") +
+        td("s0", "11/28 7pm") +
+        td("s0", "2") +
+        td("s0", "Bowling"),
+    ),
+  ]);
+  const [al] = parseActivities({ gid: "4", name: "Portland", rows: parseGrid(pdx) });
+  assert.deepEqual(
+    [al.location, al.needsReservation, al.when, al.rank, al.notes],
+    ["Vancouver", "Yes", "11/28 7pm", "2", "Bowling"],
+  );
+});
+
+test("a Hikes tab renders as an activity list", () => {
+  const html = page([
+    row(td("s1", "Hike Name") + td("s1", "Notes")),
+    row(td("s0", "Latourell Falls") + td("s0", "200 Ft walk from the parking lot")),
+    row(td("s0", "Multnomah Falls") + td("s0", "1.2 miles to the top bridge")),
+  ]);
+  const tab = { gid: "5", name: "Hikes", rows: parseGrid(html) };
+
+  const kind = classify(tab);
+  assert.equal(kind, "activities");
+  assert.equal(titleFor(tab, kind), "Hikes", "the section keeps the sheet's tab name");
+
+  const items = parseActivities(tab);
+  assert.equal(items.length, 2);
+  assert.equal(items[0].name, "Latourell Falls");
+  assert.equal(items[0].notes, "200 Ft walk from the parking lot");
 });
 
 /* -------------------------------------------------------------- restaurants */
