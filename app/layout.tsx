@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Nudelman Thanksgiving 2026 · Portland, Oregon",
+  title: "Nudelman/Veldran Thanksgiving 2026 · Portland, Oregon",
   description:
     "Schedule, lodging, flights and plans for the family Thanksgiving on the Oregon coast.",
   openGraph: {

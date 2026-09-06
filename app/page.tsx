@@ -164,7 +164,7 @@ export default async function Page() {
         <div className="wrap hero-inner">
           <div className="eyebrow">Cannon Beach · Seaside · Portland</div>
           <h1>
-            Nudelman
+            Nudelman/Veldran
             <em>Thanksgiving 2026</em>
           </h1>
           <p className="hero-sub">
