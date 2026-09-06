@@ -6,9 +6,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Nudelman Thanksgiving 2026 · Portland, Oregon",
   description:
-    "Schedule, lodging, flights and plans for the Nudelman family Thanksgiving on the Oregon coast.",
+    "Schedule, lodging, flights and plans for the family Thanksgiving on the Oregon coast.",
   openGraph: {
-    title: "Nudelman Thanksgiving 2026",
+    title: "Nudelman/Veldran Thanksgiving 2026",
     description: "Portland & Cannon Beach · November 21–29, 2026",
     type: "website",
   },
