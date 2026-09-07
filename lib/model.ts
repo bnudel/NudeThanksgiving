@@ -89,9 +89,34 @@ const DEFAULT_TITLES: Record<TabKind, string> = {
   generic: "More",
 };
 
+/**
+ * Kinds whose section title is fixed rather than taken from the tab name, so
+ * the heading reads the same however the tab happens to be labelled.
+ */
+const FIXED_TITLES: Partial<Record<TabKind, string>> = {
+  todo: "To do list",
+};
+
 /** Prefer the sheet's own tab name; fall back to the detected kind. */
 export function titleFor(tab: Tab, kind: TabKind): string {
-  return tab.name.trim() || DEFAULT_TITLES[kind];
+  return FIXED_TITLES[kind] ?? (tab.name.trim() || DEFAULT_TITLES[kind]);
+}
+
+/**
+ * Sections follow the order of the tabs in the sheet, except the to-do list,
+ * which sits after Restaurants — it's a working list, so it reads better
+ * below the reference material than in the middle of it.
+ */
+export function orderSections<T extends { kind: TabKind }>(entries: T[]): T[] {
+  const todos = entries.filter((e) => e.kind === "todo");
+  if (todos.length === 0) return entries;
+
+  const rest = entries.filter((e) => e.kind !== "todo");
+  const anchor = rest.map((e) => e.kind).lastIndexOf("restaurants");
+
+  return anchor < 0
+    ? [...rest, ...todos]
+    : [...rest.slice(0, anchor + 1), ...todos, ...rest.slice(anchor + 1)];
 }
 
 export function findHeaderRow(rows: Cell[][]): Cell[] | undefined {

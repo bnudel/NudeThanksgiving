@@ -22,6 +22,7 @@ import {
   isPlaceLabel,
   mergeActivityTabs,
   nameFromUrl,
+  orderSections,
   parseActivities,
   parseFlights,
   parseLodging,
@@ -1038,6 +1039,47 @@ test("the legacy heading-row layout still parses", () => {
     "an older copy of the sheet keeps working",
   );
   assert.equal(countTodos(groups).done, 1);
+});
+
+test("the to-do section is titled and placed independently of the sheet", () => {
+  // Whatever the tab is called, the heading reads the same.
+  assert.equal(titleFor({ gid: "9", name: "To-Do List", rows: [] }, "todo"), "To do list");
+  assert.equal(titleFor({ gid: "9", name: "", rows: [] }, "todo"), "To do list");
+  // Other kinds still take the sheet's own tab name.
+  assert.equal(titleFor({ gid: "1", name: "Coast ideas", rows: [] }, "activities"), "Coast ideas");
+});
+
+test("the to-do list is moved below Restaurants", () => {
+  // In the sheet the to-do tab sits third; on the page it belongs after the
+  // reference sections.
+  const sheetOrder = [
+    { kind: "schedule" as const },
+    { kind: "lodging" as const },
+    { kind: "todo" as const },
+    { kind: "activities" as const },
+    { kind: "restaurants" as const },
+    { kind: "payments" as const },
+  ];
+  assert.deepEqual(
+    orderSections(sheetOrder).map((e) => e.kind),
+    ["schedule", "lodging", "activities", "restaurants", "todo", "payments"],
+  );
+});
+
+test("with no Restaurants section the to-do list goes last", () => {
+  assert.deepEqual(
+    orderSections([
+      { kind: "schedule" as const },
+      { kind: "todo" as const },
+      { kind: "flights" as const },
+    ]).map((e) => e.kind),
+    ["schedule", "flights", "todo"],
+  );
+});
+
+test("ordering leaves a page with no to-do list untouched", () => {
+  const entries = [{ kind: "schedule" as const }, { kind: "restaurants" as const }];
+  assert.deepEqual(orderSections(entries).map((e) => e.kind), ["schedule", "restaurants"]);
 });
 
 test("a Done? column makes the tab a to-do list", () => {

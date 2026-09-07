@@ -17,6 +17,7 @@ import {
   countStays,
   countTodos,
   mergeActivityTabs,
+  orderSections,
   parseActivities,
   parseFlights,
   parseGeneric,
@@ -85,7 +86,7 @@ function buildIndex(tabs: Tab[]): Entry[] {
     entries.push({ tab, kind, title, id: n === 1 ? base : `${base}-${n}` });
   }
 
-  return entries;
+  return orderSections(entries);
 }
 
 function renderTab(
@@ -235,7 +236,7 @@ export default async function Page() {
       <header className="hero">
         <Haystack />
         <div className="wrap hero-inner">
-          <div className="eyebrow">Cannon Beach · Seaside · Portland</div>
+          <div className="eyebrow">Cannon Beach · Vancouver · Portland</div>
           <h1>
             Nudelman/Veldran
             <em>Thanksgiving 2026</em>

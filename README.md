@@ -202,6 +202,16 @@ day comes within forecast range the live figures replace it automatically.
 
 If either API is unavailable the schedule renders without it — daylight alone.
 
+### Section order
+
+Sections follow the order of the tabs in the sheet, with one exception: the
+to-do list is moved below Restaurants. It's a working list rather than
+reference material, so it reads better after everything else. That's in
+`orderSections` in `lib/model.ts`.
+
+Its heading is always **"To do list"**, whatever the tab is named — the only
+section with a fixed title.
+
 ### The to-do list
 
 One row per task, with **`Type` naming the section** it belongs to
