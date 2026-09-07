@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { normalizeColor, parseGrid, parseStyles, parseTabIndex, unwrapHref } from "./parse.ts";
+import {
+  cellsFromCsv,
+  normalizeColor,
+  parseCsv,
+  parseGrid,
+  parseStyles,
+  parseTabIndex,
+  unwrapHref,
+} from "./parse.ts";
 import {
   ACTIVITY_ROLES,
   TAB_KINDS,
@@ -1028,6 +1036,64 @@ ${row(td("s0", "Still outstanding") + td("s0", "FALSE"))}
     ],
     "a struck task is done, and isn't mistaken for a group heading",
   );
+});
+
+test("csv parsing survives quotes, commas and newlines inside fields", () => {
+  const csv = '"a","b,c","d""e"\n"multi\nline","",""\n';
+  assert.deepEqual(parseCsv(csv), [
+    ["a", "b,c", 'd"e'],
+    ["multi\nline", "", ""],
+  ]);
+});
+
+test("the values feed recovers checkboxes the published HTML drops", () => {
+  // Google publishes a checkbox cell as empty, so the Done column arrives
+  // blank from the HTML. Without the values feed every tick is lost AND bare
+  // task rows collapse into headings.
+  const header = ["Type", "When?", "Who?", "Done?", "Details if Booked", "Notes"];
+  const data = [
+    ["Activities", "", "", "", "", ""],
+    ["Japaneese Garden", "", "", "FALSE", "", ""],
+    ["Amaterra Winery", "", "", "FALSE", "", ""],
+    ["Dinner Reservations", "", "", "", "", ""],
+    ["Oakshire Beer Hall", "Trivia Wed 7-9", "", "TRUE", "", "Arrive early"],
+    ["Order Thanksgiving Food", "October 25th", "", "FALSE", "", ""],
+  ];
+  const values = cellsFromCsv([header, ...data]);
+  // What the published HTML gives us: the same grid with the Done column blank.
+  const rows = cellsFromCsv([header, ...data.map((r) => r.map((v, i) => (i === 3 ? "" : v)))]);
+
+  const withValues = parseTodos({ gid: "9", name: "To-Do List", rows, values });
+  assert.deepEqual(
+    withValues.map((g) => g.name),
+    ["Activities", "Dinner Reservations"],
+    "only the real headings become sections",
+  );
+  assert.deepEqual(countTodos(withValues), { done: 1, total: 4 });
+  assert.equal(
+    withValues[1].items.find((t) => t.done)?.task,
+    "Oakshire Beer Hall",
+    "the ticked item is the one that's ticked in the sheet",
+  );
+
+  const htmlOnly = parseTodos({ gid: "9", name: "To-Do List", rows });
+  assert.equal(countTodos(htmlOnly).done, 0, "without the feed, every tick is lost");
+  assert.ok(
+    countTodos(htmlOnly).total < countTodos(withValues).total,
+    "and tasks go missing, having been read as section headings",
+  );
+  assert.ok(
+    !htmlOnly.some((g) => g.items.some((t) => t.task === "Japaneese Garden")),
+    "a bare task row vanishes entirely — read as a heading, then dropped as empty",
+  );
+});
+
+test("classify reads the values feed when the HTML header is thin", () => {
+  const values = cellsFromCsv([
+    ["Type", "When?", "Who?", "Done?", "Details if Booked", "Notes"],
+    ["Activities", "", "", "", "", ""],
+  ]);
+  assert.equal(classify({ gid: "9", name: "To-Do", rows: [], values }), "todo");
 });
 
 test("a task with only a name isn't swallowed as a group heading", () => {

@@ -1,4 +1,11 @@
-import { parseGrid, parseStyles, parseTabIndex, type Cell } from "./parse";
+import {
+  cellsFromCsv,
+  parseCsv,
+  parseGrid,
+  parseStyles,
+  parseTabIndex,
+  type Cell,
+} from "./parse";
 
 export type { Cell } from "./parse";
 
@@ -20,7 +27,19 @@ export const EDIT_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit
 /** How long (seconds) before we re-fetch the published sheet. */
 export const REVALIDATE = Number(process.env.SHEET_REVALIDATE ?? 300);
 
-export type Tab = { gid: string; name: string; rows: Cell[][] };
+export type Tab = {
+  gid: string;
+  name: string;
+  /** Cells from the published HTML — carries colours, bold, merges. */
+  rows: Cell[][];
+  /**
+   * Cells from the gviz values feed, when the tab needs it. The published
+   * HTML renders a checkbox cell as empty, losing the boolean entirely; this
+   * feed exports it as TRUE/FALSE. Only fetched for tabs that have a
+   * checkbox-ish column, since it costs an extra request.
+   */
+  values?: Cell[][];
+};
 
 export class SheetNotPublishedError extends Error {
   constructor(detail = "") {
@@ -45,10 +64,44 @@ async function get(url: string): Promise<string> {
   return res.text();
 }
 
+/**
+ * The gviz values feed for one tab, addressed by sheet name. Requires the
+ * spreadsheet to be shared as "anyone with the link can view" — which it is,
+ * independently of Publish to web.
+ */
+async function fetchValues(name: string): Promise<Cell[][] | null> {
+  if (!name.trim()) return null;
+  const url =
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq` +
+    `?tqx=out:csv&headers=1&sheet=${encodeURIComponent(name)}`;
+  try {
+    const res = await fetch(url, { next: { revalidate: REVALIDATE } });
+    if (!res.ok) return null;
+    const csv = await res.text();
+    if (!csv.trim()) return null;
+    return cellsFromCsv(parseCsv(csv));
+  } catch {
+    return null;
+  }
+}
+
+/** Does this tab have a checkbox column whose value the HTML would drop? */
+function needsValues(rows: Cell[][]): boolean {
+  return rows
+    .slice(0, 6)
+    .some((row) =>
+      row.some((cell) => /^done\??$|^complete[d]?\??$/i.test(cell.text.trim())),
+    );
+}
+
 async function fetchTab(ref: { gid: string; name: string }): Promise<Tab> {
   // This endpoint renders exactly one sheet, which keeps parsing unambiguous.
   const html = await get(`${PUB_BASE}/pubhtml/sheet?gid=${ref.gid}`);
-  return { gid: ref.gid, name: ref.name, rows: parseGrid(html, parseStyles(html)) };
+  const rows = parseGrid(html, parseStyles(html));
+
+  const values = needsValues(rows) ? await fetchValues(ref.name) : null;
+
+  return { gid: ref.gid, name: ref.name, rows, ...(values ? { values } : {}) };
 }
 
 /** Fetch every tab of the published workbook, in sheet order. */

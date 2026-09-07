@@ -806,6 +806,21 @@ main {
   color: var(--ink-faint);
 }
 
+/* Climate normals rather than a real forecast — visibly provisional. */
+.cond-wx.is-typical b {
+  color: var(--ink-dim);
+}
+
+.cond-tag {
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
 .g-sun {
   color: var(--lantern);
   flex: none;

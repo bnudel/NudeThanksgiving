@@ -29,6 +29,7 @@ import {
   type TabKind,
 } from "@/lib/model";
 import { EDIT_URL, fetchWorkbook, REVALIDATE, type Tab } from "@/lib/sheet";
+import { fetchClimate, type Normals } from "@/lib/climate";
 import { fetchForecasts, type PlaceForecast } from "@/lib/weather";
 
 export const revalidate = 300;
@@ -87,14 +88,18 @@ function buildIndex(tabs: Tab[]): Entry[] {
   return entries;
 }
 
-function renderTab({ tab, kind, title, id, lists }: Entry, forecasts: PlaceForecast[]) {
+function renderTab(
+  { tab, kind, title, id, lists }: Entry,
+  forecasts: PlaceForecast[],
+  normals: Normals[],
+) {
   const tabName = title;
   switch (kind) {
     case "schedule": {
       const schedule = parseSchedule(tab);
       return (
         <Section key={id} id={id} title={tabName} count={`${schedule.days.length} days`}>
-          <ScheduleView schedule={schedule} forecasts={forecasts} />
+          <ScheduleView schedule={schedule} forecasts={forecasts} normals={normals} />
         </Section>
       );
     }
@@ -218,10 +223,10 @@ export default async function Page() {
   // Weather lives inside the schedule now — each day shows the forecast for
   // wherever that day happens. A weather outage yields an empty list and the
   // schedule simply renders without it.
-  const forecasts = await fetchForecasts();
+  const [forecasts, normals] = await Promise.all([fetchForecasts(), fetchClimate()]);
 
   const navItems = sections.map((s) => ({ id: s.id, title: s.title }));
-  const body = sections.map((s) => renderTab(s, forecasts));
+  const body = sections.map((s) => renderTab(s, forecasts, normals));
 
   return (
     <>

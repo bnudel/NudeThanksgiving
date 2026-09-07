@@ -140,6 +140,77 @@ export function parseStyles(html: string): StyleMap {
   return map;
 }
 
+/* --------------------------------------------------------------------- csv */
+
+/**
+ * RFC 4180 CSV, including quoted fields with embedded commas, quotes and
+ * newlines. Used for the gviz values feed, which — unlike the published HTML —
+ * exports checkbox cells as TRUE/FALSE.
+ */
+export function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+
+    if (quoted) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          quoted = false;
+        }
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      quoted = true;
+    } else if (ch === ",") {
+      row.push(field);
+      field = "";
+    } else if (ch === "\n" || ch === "\r") {
+      // Swallow \r\n as one break.
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += ch;
+    }
+  }
+
+  if (field !== "" || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+/** Turn a CSV grid into cells, so value-sourced tabs parse like any other. */
+export function cellsFromCsv(rows: string[][]): Cell[][] {
+  return trimEmptyEdges(
+    rows.map((row) =>
+      row.map((text) => ({
+        text: text.trim(),
+        bg: "",
+        fg: "",
+        bold: false,
+        strike: false,
+        colspan: 1,
+      })),
+    ),
+  );
+}
+
 /* -------------------------------------------------------------- tab index */
 
 /** Read the published tab strip: gid + name, in sheet order. */

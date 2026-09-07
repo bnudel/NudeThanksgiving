@@ -12,6 +12,7 @@ import type {
   TodoGroup,
   Traveler,
 } from "@/lib/model";
+import { normalsFor, type Normals } from "@/lib/climate";
 import { formatTime, sunTimes } from "@/lib/sun";
 import { describe, lookup, placeForCity, type PlaceForecast, type Sky } from "@/lib/weather";
 
@@ -142,30 +143,51 @@ function DriveIcon() {
 function DayConditions({
   day,
   forecasts,
+  normals,
 }: {
   day: ScheduleDay;
   forecasts: PlaceForecast[];
+  normals: Normals[];
 }) {
   const place = placeForCity(day.city);
   const wx = lookup(forecasts, place.name, day.date);
+  const typical = wx ? undefined : normalsFor(normals, place.name);
   const sun = day.date
     ? sunTimes(new Date(`${day.date}T12:00:00Z`), place.lat, place.lon)
     : null;
 
-  if (!wx && !sun) return null;
+  if (!wx && !typical && !sun) return null;
 
   return (
     <div className="day-cond">
       {wx && (
-        <span className="cond-wx" title={describe(wx.code).label}>
+        <span className="cond-wx" title={`${describe(wx.code).label} in ${place.name}`}>
           <SkyGlyph sky={describe(wx.code).sky} />
           {wx.hi !== null && <b>{Math.round(wx.hi)}°</b>}
           {wx.lo !== null && <span className="cond-lo">{Math.round(wx.lo)}°</span>}
-          {wx.chance !== null && wx.chance >= 30 && (
-            <span className="cond-rain">{Math.round(wx.chance)}%</span>
+          {wx.chance !== null && (
+            <span className={wx.chance >= 40 ? "cond-rain" : "cond-lo"}>
+              {Math.round(wx.chance)}% rain
+            </span>
           )}
         </span>
       )}
+
+      {typical && (
+        <span
+          className="cond-wx is-typical"
+          title={`Average for mid-to-late November in ${place.name}, from ${typical.samples} days of past observations`}
+        >
+          <SkyGlyph sky={typical.wetPct >= 55 ? "rain" : "cloud"} />
+          <b>{Math.round(typical.hi)}°</b>
+          <span className="cond-lo">{Math.round(typical.lo)}°</span>
+          <span className={typical.wetPct >= 50 ? "cond-rain" : "cond-lo"}>
+            {typical.wetPct}% rain
+          </span>
+          <span className="cond-tag">typical</span>
+        </span>
+      )}
+
       {sun && (
         <span className="cond-sun" title={`Daylight in ${place.name}`}>
           <SunUpGlyph />
@@ -181,9 +203,11 @@ function DayConditions({
 export function ScheduleView({
   schedule,
   forecasts = [],
+  normals = [],
 }: {
   schedule: Schedule;
   forecasts?: PlaceForecast[];
+  normals?: Normals[];
 }) {
   const { days, types, cities } = schedule;
   const cityColor = new Map(cities.map((c) => [c.label, accent(c.fg)]));
@@ -230,7 +254,7 @@ export function ScheduleView({
                     {d.driveTime}
                   </div>
                 )}
-                <DayConditions day={d} forecasts={forecasts} />
+                <DayConditions day={d} forecasts={forecasts} normals={normals} />
               </div>
               <div className="events">
                 {d.events.length === 0 ? (

@@ -192,9 +192,15 @@ trip day shows its hours no matter how far out — currently around 7:25am to
 
 **The forecast** comes from [Open-Meteo](https://open-meteo.com) — free, no API
 key — for Cannon Beach and Portland, cached 30 minutes, requesting the full
-16-day window. Until roughly 10 November the trip is out of range, so days show
-daylight only and the temperature appears on its own once it's available. If
-the API is down the schedule simply renders without it.
+16-day window.
+
+**Outside forecast range, days show typical conditions instead**, marked with a
+"typical" tag: high, low and chance of rain averaged from ten years of actual
+observations for 15–30 November at each location (`lib/climate.ts`, Open-Meteo's
+archive API, cached daily). Real measured history, not estimates. The moment a
+day comes within forecast range the live figures replace it automatically.
+
+If either API is unavailable the schedule renders without it — daylight alone.
 
 ### The to-do list
 
@@ -204,10 +210,21 @@ columns are `Type` (the task), `When?`, `Who?`, `Done?`, `Details if Booked`
 and `Notes` — all optional except the task.
 
 Tick a checkbox in the sheet and the item crosses off here, with a filled box
-and the group header counting done-of-total. Google publishes checkboxes
-inconsistently, so `TRUE`/`FALSE`, `1`/`0`, glyphs (`✓`, `☑`, `✅`), `yes`,
-`x`, `done`, `booked` and real checkbox inputs are all accepted. A
-struck-through task counts as done too.
+and the group header counting done-of-total.
+
+**Checkboxes need a second data source.** Google's published HTML renders a
+checkbox cell as *empty* — the boolean is simply absent. So for any tab with a
+`Done?` column the site also fetches the gviz values feed
+(`/gviz/tq?tqx=out:csv&headers=1&sheet=<name>`), which exports checkboxes as
+`TRUE`/`FALSE`, and parses the to-do list from that instead. The published HTML
+is still what supplies colours everywhere else.
+
+That feed needs the spreadsheet shared as **anyone with the link can view**,
+which is separate from Publish to web. If ticks stop appearing, check that
+first.
+
+`TRUE`/`FALSE`, `1`/`0`, glyphs (`✓`, `☑`, `✅`), `yes`, `x`, `done`, `booked`
+and real checkbox inputs are all accepted, as is a struck-through task.
 
 A row is a group heading only when it's a lone label *with no checkbox beside
 it* — testing for the checkbox rather than just a lone cell, so a task with

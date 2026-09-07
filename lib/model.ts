@@ -65,7 +65,7 @@ export type TabKind = (typeof TAB_KINDS)[number];
  * renaming a tab in the sheet doesn't break the site.
  */
 export function classify(tab: Tab): TabKind {
-  const header = findHeaderRow(tab.rows);
+  const header = findHeaderRow(tab.values ?? tab.rows);
   if (!header) return "generic";
   if (rowHas(header, "Day", "Summary")) return "schedule";
   if (rowHas(header, "Dates") && rowHas(header, "Cancel policy")) return "lodging";
@@ -783,15 +783,20 @@ export function isChecked(value: string): boolean {
 }
 
 export function parseTodos(tab: Tab): TodoGroup[] {
-  const i = headerIndex(tab.rows);
+  // Prefer the values feed: the published HTML renders checkbox cells as
+  // empty, which loses every tick and makes bare task rows look like section
+  // headings.
+  const rows = tab.values ?? tab.rows;
+
+  const i = headerIndex(rows);
   if (i < 0) return [];
-  const columns = columnsOf(tab.rows[i]);
+  const columns = columnsOf(rows[i]);
   const taskAt = columns[norm("Type")] ?? columns[norm("Task")] ?? 0;
 
   const groups: TodoGroup[] = [];
   let current: TodoGroup | null = null;
 
-  for (const row of tab.rows.slice(i + 1)) {
+  for (const row of rows.slice(i + 1)) {
     if (!nonEmpty(row)) continue;
 
     const label = txt(row, taskAt);
@@ -800,10 +805,11 @@ export function parseTodos(tab: Tab): TodoGroup[] {
     const doneRaw = col(row, columns, "Done?", "Done", "Complete");
     const struck = row[taskAt]?.strike === true;
 
-    // A section heading is a lone label with no checkbox beside it. Testing
-    // for the checkbox — not just for a lone cell — matters because a task
-    // whose only filled-in field is its name would otherwise be swallowed as
-    // a heading, taking the rest of its group with it.
+    // A section heading is a lone label with no checkbox beside it — the
+    // headings in the sheet are also bold, which corroborates it when the
+    // styling is available. Testing for the checkbox rather than just for a
+    // lone cell matters because a task whose only filled-in field is its name
+    // would otherwise be swallowed as a heading, taking its whole group along.
     if (nonEmpty(row) === 1 && !doneRaw.trim() && !struck) {
       current = { name: label, items: [] };
       groups.push(current);
