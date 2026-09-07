@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { normalizeColor, parseGrid, parseStyles, parseTabIndex, unwrapHref } from "./parse.ts";
 import {
   classify,
+  isPlaceLabel,
   coastAffinity,
   countStays,
   mergeActivityTabs,
@@ -278,6 +279,59 @@ test("the key splits into activity fills and city text colours", () => {
   const event = s.days[0].events[0];
   assert.equal(event.type, "Beach", "fill resolves to the activity type");
   assert.equal(event.city, "Cannon Beach, OR", "text colour resolves to the city");
+});
+
+test("every city in the key is listed, however it was coloured", () => {
+  // The regression: cities were split from types by guessing which colour
+  // channel was set, so a city row coloured differently from the others (or
+  // not coloured at all) vanished from the key.
+  const html = page([
+    row(td("s1", "Day") + td("s1", "Summary") + td("s1", "Total Drive Time") + td("s1", "9am")),
+    row(td("s0", "Sunday, November 22") + td("s0", "Beach") + td("s0", "15 Minutes") + td("s6", "Ecola State Park")),
+    row(td("s0", "") + td("s0", "Key")),
+    row(td("s0", "") + td("s3", "Dining")),
+    row(td("s0", "") + td("s4", "Beach")),
+    row(blank(2)),
+    // Cannon Beach carries a fill; Portland carries text colour; Vancouver
+    // has neither. All three are still cities.
+    row(td("s0", "") + td("s2", "Cannon Beach, OR")),
+    row(td("s0", "") + td("s8", "Portland, OR")),
+    row(td("s0", "") + td("s0", "Vancouver, WA")),
+  ]);
+
+  const s = parseSchedule({ gid: "1", name: "Schedule", rows: parseGrid(html) });
+
+  assert.deepEqual(
+    s.cities.map((c) => c.label),
+    ["Cannon Beach, OR", "Portland, OR", "Vancouver, WA"],
+    "all three cities appear in the key",
+  );
+  assert.deepEqual(
+    s.types.map((t) => t.label),
+    ["Dining", "Beach"],
+    "place names are not mistaken for activity types",
+  );
+});
+
+test("isPlaceLabel tells cities from activity types", () => {
+  for (const city of ["Cannon Beach, OR", "Portland, OR", "Vancouver, WA", "Seaside, Oregon"]) {
+    assert.ok(isPlaceLabel(city), `${city} should read as a place`);
+  }
+  for (const type of ["Travel", "Beach", "Hiking", "Dinner Reservation Booked", "Shopping"]) {
+    assert.ok(!isPlaceLabel(type), `${type} should read as an activity type`);
+  }
+});
+
+test("a city keyed by fill still tags its events", () => {
+  const html = page([
+    row(td("s1", "Day") + td("s1", "Summary") + td("s1", "Total Drive Time") + td("s1", "9am")),
+    // s2 fill is shared with the "Cannon Beach, OR" key row below.
+    row(td("s0", "Monday, November 23") + td("s0", "Coast") + td("s0", "15 Minutes") + td("s2", "Hug Point")),
+    row(td("s0", "") + td("s2", "Cannon Beach, OR")),
+  ]);
+  const s = parseSchedule({ gid: "1", name: "Schedule", rows: parseGrid(html) });
+  assert.equal(s.days[0].events[0].city, "Cannon Beach, OR");
+  assert.equal(s.days[0].events[0].type, undefined, "a city fill isn't also an activity type");
 });
 
 test("a city is inferred from the text when no colour matches", () => {

@@ -151,6 +151,11 @@ function cityFromText(text: string): string | undefined {
   return undefined;
 }
 
+/** "Cannon Beach, OR" / "Vancouver, WA" — a key entry naming a place. */
+export function isPlaceLabel(label: string): boolean {
+  return /,\s*(or|wa|oregon|washington)\.?\s*$/i.test(label.trim());
+}
+
 export function parseSchedule(tab: Tab): Schedule {
   const rows = tab.rows;
   const hIdx = rows.findIndex((r) => rowHas(r, "Day", "Summary"));
@@ -217,18 +222,25 @@ export function parseSchedule(tab: Tab): Schedule {
     });
   }
 
-  // Fills describe the activity; text colours describe the city.
-  const types = legendRows.filter((e) => e.bg);
-  const cities = legendRows.filter((e) => !e.bg && e.fg);
+  // A key entry naming a place ("Cannon Beach, OR") is a city; everything else
+  // describes the kind of activity. Splitting on the label rather than on
+  // which colour channel happens to be set means a city still appears in the
+  // key whether it was coloured by fill, by text colour, or not at all.
+  const types = legendRows.filter((e) => !isPlaceLabel(e.label));
+  const cities = legendRows.filter((e) => isPlaceLabel(e.label));
 
-  const typeByBg = new Map(types.map((e) => [e.bg, e.label]));
-  const cityByFg = new Map(cities.map((e) => [e.fg, e.label]));
+  const typeByBg = new Map(types.filter((e) => e.bg).map((e) => [e.bg, e.label]));
+  const cityByFg = new Map(cities.filter((e) => e.fg).map((e) => [e.fg, e.label]));
+  const cityByBg = new Map(cities.filter((e) => e.bg).map((e) => [e.bg, e.label]));
 
   for (const day of days) {
     for (const event of day.events) {
       event.type = (event.bg && typeByBg.get(event.bg)) || undefined;
       event.city =
-        (event.fg && cityByFg.get(event.fg)) || cityFromText(event.text) || undefined;
+        (event.fg && cityByFg.get(event.fg)) ||
+        (event.bg && cityByBg.get(event.bg)) ||
+        cityFromText(event.text) ||
+        undefined;
     }
   }
 

@@ -165,6 +165,21 @@ won't misroute anything.
 Adding a third things-to-do tab is fine; it just won't receive hikes. Deleting
 the Hikes tab is also fine — the two lists carry on unchanged.
 
+### Weather
+
+A seven-day forecast for Cannon Beach and Portland, from
+[Open-Meteo](https://open-meteo.com) — free, no API key, no account. Fetched
+server-side and cached for 30 minutes. It isn't a spreadsheet tab; the section
+is slotted in after the schedule.
+
+If the API is down or returns something unexpected, the section says so and the
+rest of the page is unaffected. Coordinates and the place list live in
+`lib/weather.ts`.
+
+Until early November the trip dates are outside forecast range, so this shows
+the coming week rather than Thanksgiving. It becomes the trip forecast on its
+own — no change needed.
+
 ### Lodging
 
 Structure the tab as: a location name alone on a row, a header row, then one
@@ -178,18 +193,22 @@ cost containing the word "paid" shows a Paid badge automatically.
 
 ### Schedule colours
 
-The key at the bottom of the Schedule tab drives two separate badges, read from
-two different colour channels of the same cell:
+The key at the bottom of the Schedule tab drives two separate badges.
 
-- **Cell fill → activity type.** Rows in the key that have a background colour
-  (Travel, Dining, Hiking…) are matched against each entry's fill.
-- **Text colour → city.** Rows that have coloured *text* and no fill
-  (Cannon Beach, OR / Portland, OR / Vancouver, WA) are matched against each
-  entry's font colour.
+**Which is which comes from the label, not the colour.** A key entry ending in
+a state — `Cannon Beach, OR`, `Vancouver, WA` — is a city; everything else
+(Travel, Dining, Hiking…) is an activity type. That means a city shows up in
+the key whether you coloured it by fill, by text colour, or not at all.
 
-A row labelled "Key" is treated as a heading and skipped. If an entry's font
-colour doesn't match anything, the city is guessed from place names in the
-entry text — so "Dinner in Vancouver" still gets tagged even without colour.
+Matching entries to the key:
+
+- **Cell fill → activity type**, matched against the type entries.
+- **Text colour → city**, matched against the city entries. If a city was
+  keyed by fill instead, that's matched too.
+- If neither resolves, the city is guessed from place names in the entry text,
+  so "Dinner in Vancouver" still gets tagged with no colour at all.
+
+A row labelled "Key" is treated as a heading and skipped.
 
 **Hour columns are found by their heading** ("7am", "2pm"), not by counting
 from the left, so inserting a column like `Total Drive Time` doesn't shift the

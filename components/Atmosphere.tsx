@@ -7,14 +7,14 @@ function lcg(seed: number) {
   };
 }
 
-// Light drizzle rather than a downpour — the sun's out.
+// A real drizzle, but not the downpour we started with — the sun's out too.
 const rand = lcg(20261121);
-const DROPS = Array.from({ length: 38 }, () => ({
+const DROPS = Array.from({ length: 64 }, () => ({
   left: rand() * 100,
-  delay: rand() * 4,
-  duration: 0.75 + rand() * 1.1,
-  opacity: 0.12 + rand() * 0.3,
-  height: 40 + rand() * 70,
+  delay: rand() * 3.4,
+  duration: 0.6 + rand() * 0.95,
+  opacity: 0.16 + rand() * 0.36,
+  height: 45 + rand() * 80,
 }));
 
 export default function Atmosphere() {

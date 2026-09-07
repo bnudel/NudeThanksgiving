@@ -3,6 +3,7 @@ import Countdown from "@/components/Countdown";
 import ActivityTabs, { type ActivityList } from "@/components/ActivityTabs";
 import Haystack from "@/components/Haystack";
 import PaymentsGate from "@/components/PaymentsGate";
+import Weather from "@/components/Weather";
 import {
   FlightsView,
   GenericView,
@@ -202,6 +203,24 @@ export default async function Page() {
 
   const sections = buildIndex(tabs);
 
+  // Weather isn't a spreadsheet tab, so it's slotted in after the schedule
+  // (or at the end if there isn't one).
+  const scheduleAt = sections.findIndex((s) => s.kind === "schedule");
+  const weatherAfter = scheduleAt >= 0 ? scheduleAt : sections.length - 1;
+
+  const navItems = sections.flatMap((s, i) =>
+    i === weatherAfter
+      ? [
+          { id: s.id, title: s.title },
+          { id: "weather", title: "Weather" },
+        ]
+      : [{ id: s.id, title: s.title }],
+  );
+
+  const body = sections.flatMap((s, i) =>
+    i === weatherAfter ? [renderTab(s), <Weather key="weather" />] : [renderTab(s)],
+  );
+
   return (
     <>
       <Atmosphere />
@@ -221,9 +240,9 @@ export default async function Page() {
       {sections.length > 0 && (
         <nav className="nav">
           <div className="nav-inner">
-            {sections.map((s) => (
-              <a key={s.tab.gid} href={`#${s.id}`}>
-                {s.title}
+            {navItems.map((n) => (
+              <a key={n.id} href={`#${n.id}`}>
+                {n.title}
               </a>
             ))}
           </div>
@@ -231,7 +250,7 @@ export default async function Page() {
       )}
 
       <main>
-        {error ? <SetupNotice message={error} /> : sections.map(renderTab)}
+        {error ? <SetupNotice message={error} /> : body}
 
         <div className="wrap">
           <div className="footer">
