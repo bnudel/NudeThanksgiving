@@ -27,8 +27,18 @@ If you ever re-publish and get a new `2PACX-…` link, update `SHEET_PUB_ID`.
 ```bash
 npm install
 npm run dev        # http://localhost:3000
-npm test           # parser unit tests, no network needed
+npm run check      # types + tests — run this before pushing
 ```
+
+`npm test` alone runs the unit tests via Node's type stripping, which **erases
+types without checking them**. A missing case in a `Record<TabKind, …>` will
+pass the tests and fail the Vercel build. `npm run typecheck` is what catches
+that, so `npm run check` runs both.
+
+Where a lookup table has to cover every member of a union, the union is
+declared as a `const` array (`TAB_KINDS`, `ACTIVITY_ROLES`) and the type is
+derived from it — that way the tests can iterate the members and catch a gap
+locally too, not just at build time.
 
 ## Deploy to Vercel
 

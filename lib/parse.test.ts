@@ -3,8 +3,11 @@ import { test } from "node:test";
 
 import { normalizeColor, parseGrid, parseStyles, parseTabIndex, unwrapHref } from "./parse.ts";
 import {
+  ACTIVITY_ROLES,
+  TAB_KINDS,
   classify,
   coastAffinity,
+  labelFor,
   countStays,
   countTodos,
   isChecked,
@@ -167,6 +170,29 @@ test("parseTabIndex falls back to bare gid references when the menu is missing",
     ["111", "222"],
   );
   assert.equal(tabs[0].name, "", "unnamed tabs get titled from their detected kind");
+});
+
+test("every tab kind has a fallback title", () => {
+  // A missing entry here is a TypeScript error, but TS errors only surface at
+  // build time — on Vercel, minutes after a push. This catches it locally.
+  for (const kind of TAB_KINDS) {
+    const title = titleFor({ gid: "1", name: "", rows: [] }, kind);
+    assert.ok(title && title.length > 0, `${kind} needs a default title`);
+  }
+});
+
+test("every activity role has a toggle label or falls back to the tab name", () => {
+  for (const role of ACTIVITY_ROLES) {
+    const named = labelFor({ gid: "1", name: "My tab", rows: [] }, role);
+    assert.ok(named.length > 0, `${role} must produce a label`);
+    // "other" has no place name of its own and must use the tab's.
+    if (role === "other") assert.equal(named, "My tab");
+  }
+  assert.equal(
+    labelFor({ gid: "1", name: "", rows: [] }, "other"),
+    "Things to do",
+    "an unnamed tab still gets a usable button label",
+  );
 });
 
 test("titleFor prefers the sheet tab name, falls back to the kind", () => {

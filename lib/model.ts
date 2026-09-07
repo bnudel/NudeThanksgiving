@@ -41,15 +41,24 @@ function colCell(row: Cell[], columns: Columns, ...names: string[]): Cell | unde
   return undefined;
 }
 
-export type TabKind =
-  | "schedule"
-  | "lodging"
-  | "flights"
-  | "activities"
-  | "restaurants"
-  | "payments"
-  | "todo"
-  | "generic";
+/**
+ * Kept as a runtime array with the type derived from it, so tests can iterate
+ * every kind and assert the lookup tables cover them. A bare union type is
+ * only checked at build time, which is too late when the build runs on a
+ * server somewhere else.
+ */
+export const TAB_KINDS = [
+  "schedule",
+  "lodging",
+  "flights",
+  "activities",
+  "restaurants",
+  "payments",
+  "todo",
+  "generic",
+] as const;
+
+export type TabKind = (typeof TAB_KINDS)[number];
 
 /**
  * Identify a tab by the shape of its header row rather than its name, so
@@ -76,6 +85,7 @@ const DEFAULT_TITLES: Record<TabKind, string> = {
   activities: "Things to do",
   restaurants: "Restaurants",
   payments: "Payments",
+  todo: "To do",
   generic: "More",
 };
 
@@ -532,7 +542,8 @@ export function isCoastBound(activity: Activity): boolean {
 }
 
 /** Which things-to-do list this is. */
-export type ActivityRole = "coast" | "inland" | "washington" | "other";
+export const ACTIVITY_ROLES = ["coast", "inland", "washington", "other"] as const;
+export type ActivityRole = (typeof ACTIVITY_ROLES)[number];
 
 export type ActivitySection = {
   tab: Tab;
