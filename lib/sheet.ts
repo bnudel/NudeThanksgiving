@@ -64,22 +64,41 @@ async function get(url: string): Promise<string> {
   return res.text();
 }
 
+const normalizeHeader = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
+
 /**
- * The gviz values feed for one tab, addressed by sheet name. Requires the
- * spreadsheet to be shared as "anyone with the link can view" — which it is,
- * independently of Publish to web.
+ * The gviz values feed for one tab, addressed by **gid**.
+ *
+ * Addressing it by sheet name is a trap: if the name doesn't match exactly —
+ * a stray trailing space is enough — gviz silently returns the *first* sheet
+ * instead of erroring, so the to-do list would quietly parse the schedule.
+ * The gid is exact. The guard below is belt and braces.
+ *
+ * Requires the spreadsheet to be shared as "anyone with the link can view",
+ * which is separate from Publish to web.
  */
-async function fetchValues(name: string): Promise<Cell[][] | null> {
-  if (!name.trim()) return null;
+async function fetchValues(gid: string, header: Cell[]): Promise<Cell[][] | null> {
   const url =
     `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq` +
-    `?tqx=out:csv&headers=1&sheet=${encodeURIComponent(name)}`;
+    `?tqx=out:csv&headers=1&gid=${encodeURIComponent(gid)}`;
   try {
     const res = await fetch(url, { next: { revalidate: REVALIDATE } });
     if (!res.ok) return null;
     const csv = await res.text();
     if (!csv.trim()) return null;
-    return cellsFromCsv(parseCsv(csv));
+
+    const values = cellsFromCsv(parseCsv(csv));
+    if (!values.length) return null;
+
+    // Confirm we got the tab we asked for: its header must share a column
+    // name with the one we already parsed from the published HTML.
+    const want = new Set(
+      header.map((c) => normalizeHeader(c.text)).filter((s) => s.length > 1),
+    );
+    const got = values[0].map((c) => normalizeHeader(c.text));
+    if (want.size > 0 && !got.some((name) => want.has(name))) return null;
+
+    return values;
   } catch {
     return null;
   }
@@ -99,7 +118,8 @@ async function fetchTab(ref: { gid: string; name: string }): Promise<Tab> {
   const html = await get(`${PUB_BASE}/pubhtml/sheet?gid=${ref.gid}`);
   const rows = parseGrid(html, parseStyles(html));
 
-  const values = needsValues(rows) ? await fetchValues(ref.name) : null;
+  const headerRow = rows.find((r) => r.filter((c) => c.text).length >= 2) ?? [];
+  const values = needsValues(rows) ? await fetchValues(ref.gid, headerRow) : null;
 
   return { gid: ref.gid, name: ref.name, rows, ...(values ? { values } : {}) };
 }

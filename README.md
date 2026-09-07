@@ -204,10 +204,16 @@ If either API is unavailable the schedule renders without it — daylight alone.
 
 ### The to-do list
 
-Structure it like the lodging tab: a group name alone on a row (`Activities`,
-`Dinner Reservations`, `Rental Cars`…), then one row per task. Recognised
-columns are `Type` (the task), `When?`, `Who?`, `Done?`, `Details if Booked`
-and `Notes` — all optional except the task.
+One row per task, with **`Type` naming the section** it belongs to
+(`Activities`, `Dinner Reservations`, `Lodging`, `Rental Cars`…). The task name
+lives in the first column, whose heading is left blank. Sections appear in the
+order they first show up; no heading rows needed.
+
+Other recognised columns: `When?`, `Who?`, `Done?`, `Details if Booked`,
+`Notes` — all optional.
+
+The older layout, where `Type` held the task name and sections were bold
+heading rows, still parses, so an earlier copy of the sheet won't break.
 
 Tick a checkbox in the sheet and the item crosses off here, with a filled box
 and the group header counting done-of-total.
@@ -215,11 +221,17 @@ and the group header counting done-of-total.
 **Checkboxes need a second data source.** Google's published HTML renders a
 checkbox cell as *empty* — the boolean is simply absent. So for any tab with a
 `Done?` column the site also fetches the gviz values feed
-(`/gviz/tq?tqx=out:csv&headers=1&sheet=<name>`), which exports checkboxes as
+(`/gviz/tq?tqx=out:csv&headers=1&gid=<gid>`), which exports checkboxes as
 `TRUE`/`FALSE`, and parses the to-do list from that instead. The published HTML
-is still what supplies colours everywhere else.
+still supplies colours everywhere else.
 
-That feed needs the spreadsheet shared as **anyone with the link can view**,
+**Address that feed by `gid`, never by sheet name.** Given a name it doesn't
+recognise — a stray trailing space is enough — gviz returns the *first sheet*
+rather than an error, so the to-do list silently parses the schedule. The fetch
+also checks that the returned header shares a column with the one already
+parsed from the HTML, and discards the response if not.
+
+The feed needs the spreadsheet shared as **anyone with the link can view**,
 which is separate from Publish to web. If ticks stop appearing, check that
 first.
 

@@ -974,6 +974,72 @@ const TODO_HTML = page([
   row(td("s0", "Book Rental Car") + td("s0", "NOW") + td("s0", "Eric") + td("s0", "FALSE") + td("s0", "") + td("s0", "")),
 ]);
 
+/* The current layout: task names in a blank-headed first column, `Type`
+   naming the section, no heading rows at all. */
+const TODO_CSV = [
+  ["", "Type", "When?", "Who?", "Done? ", "Details if Booked", "Notes"],
+  ["Japaneese Garden", "Activities ", "", "", "FALSE", "", ""],
+  ["Top Golf", "Activities ", "14 Days in Advance", "", "FALSE", "", "Book 14 days ahead"],
+  ["Din Thai Fung ", "Dinner Reservations ", "30 days in advance ", "", "FALSE", "", ""],
+  ["Oakshire Beer Hall", "Dinner Reservations ", "Trivia Wed 7-9", "", "TRUE", "", "Arrive early"],
+  ["Cancel/ Re Book lodging ", "Lodging", "November 7th ", "Eric", "FALSE", "", ""],
+  ["Book Reantal Car ", "Rental Cars", "NOW", "Eric", "FALSE", "", ""],
+  ["Book Reantal Car ", "Rental Cars", "NOW", "Rich", "FALSE", "", ""],
+];
+
+test("a Type column groups tasks into sections", () => {
+  const values = cellsFromCsv(TODO_CSV);
+  const groups = parseTodos({ gid: "9", name: "To-Do List", rows: values, values });
+
+  assert.deepEqual(
+    groups.map((g) => [g.name, g.items.length]),
+    [
+      ["Activities", 2],
+      ["Dinner Reservations", 2],
+      ["Lodging", 1],
+      ["Rental Cars", 2],
+    ],
+    "sections come from the Type column, in first-appearance order",
+  );
+
+  const [first] = groups[0].items;
+  assert.equal(first.task, "Japaneese Garden", "the task is the blank-headed column, not Type");
+  assert.equal(groups[3].items[1].who, "Rich");
+  assert.deepEqual(countTodos(groups), { done: 1, total: 7 });
+  assert.equal(
+    groups.flatMap((g) => g.items).find((t) => t.done)?.task,
+    "Oakshire Beer Hall",
+  );
+});
+
+test("two tasks with the same name in one section both survive", () => {
+  const values = cellsFromCsv(TODO_CSV);
+  const cars = parseTodos({ gid: "9", name: "To-Do List", rows: values, values }).at(-1)!;
+  assert.equal(cars.items.length, 2, "grouping by Type mustn't dedupe identical task names");
+  assert.deepEqual(cars.items.map((t) => t.who), ["Eric", "Rich"]);
+});
+
+test("the legacy heading-row layout still parses", () => {
+  const values = cellsFromCsv([
+    ["Type ", "When?", "Who?", "Done? ", "Details if Booked", "Notes"],
+    ["Activities ", "", "", "", "", ""],
+    ["Japaneese Garden", "", "", "FALSE", "", ""],
+    ["Dinner Reservations ", "", "", "", "", ""],
+    ["Oakshire Beer Hall", "Trivia Wed 7-9", "", "TRUE", "", "Arrive early"],
+  ]);
+  const groups = parseTodos({ gid: "9", name: "old", rows: values, values });
+
+  assert.deepEqual(
+    groups.map((g) => [g.name, g.items.length]),
+    [
+      ["Activities", 1],
+      ["Dinner Reservations", 1],
+    ],
+    "an older copy of the sheet keeps working",
+  );
+  assert.equal(countTodos(groups).done, 1);
+});
+
 test("a Done? column makes the tab a to-do list", () => {
   assert.equal(classify({ gid: "9", name: "To-Do List", rows: parseGrid(TODO_HTML) }), "todo");
 });

@@ -784,17 +784,42 @@ export function isChecked(value: string): boolean {
 
 export function parseTodos(tab: Tab): TodoGroup[] {
   // Prefer the values feed: the published HTML renders checkbox cells as
-  // empty, which loses every tick and makes bare task rows look like section
-  // headings.
+  // empty, which loses every tick.
   const rows = tab.values ?? tab.rows;
 
   const i = headerIndex(rows);
   if (i < 0) return [];
-  const columns = columnsOf(rows[i]);
-  const taskAt = columns[norm("Type")] ?? columns[norm("Task")] ?? 0;
+  const header = rows[i];
+  const columns = columnsOf(header);
+
+  const groupAt = columns[norm("Type")] ?? columns[norm("Category")] ?? columns[norm("Section")];
+
+  // Two layouts are supported.
+  //
+  // Current: the task name sits in a column with a blank heading, and `Type`
+  // names the section each task belongs to — no heading rows at all.
+  //
+  // Legacy: `Type` *is* the task name and sections are heading rows, spotted
+  // by being a lone label with no checkbox beside them.
+  const blankHeaderAt = header.findIndex((c) => !c.text.trim());
+  const namedTaskAt = columns[norm("Task")] ?? columns[norm("Item")] ?? columns[norm("To do")];
+  const taskAt = blankHeaderAt >= 0 ? blankHeaderAt : (namedTaskAt ?? groupAt ?? 0);
+  const grouped = groupAt !== undefined && groupAt !== taskAt;
 
   const groups: TodoGroup[] = [];
+  const byName = new Map<string, TodoGroup>();
   let current: TodoGroup | null = null;
+
+  const groupFor = (name: string) => {
+    const key = name.trim();
+    let group = byName.get(key);
+    if (!group) {
+      group = { name: key, items: [] };
+      byName.set(key, group);
+      groups.push(group);
+    }
+    return group;
+  };
 
   for (const row of rows.slice(i + 1)) {
     if (!nonEmpty(row)) continue;
@@ -805,20 +830,18 @@ export function parseTodos(tab: Tab): TodoGroup[] {
     const doneRaw = col(row, columns, "Done?", "Done", "Complete");
     const struck = row[taskAt]?.strike === true;
 
-    // A section heading is a lone label with no checkbox beside it — the
-    // headings in the sheet are also bold, which corroborates it when the
-    // styling is available. Testing for the checkbox rather than just for a
-    // lone cell matters because a task whose only filled-in field is its name
-    // would otherwise be swallowed as a heading, taking its whole group along.
-    if (nonEmpty(row) === 1 && !doneRaw.trim() && !struck) {
-      current = { name: label, items: [] };
-      groups.push(current);
-      continue;
-    }
-
-    if (!current) {
-      current = { name: "", items: [] };
-      groups.push(current);
+    if (grouped) {
+      current = groupFor(txt(row, groupAt) || "Other");
+    } else {
+      // A lone label with no checkbox beside it is a section heading. Testing
+      // for the checkbox rather than just for a lone cell matters: a task
+      // whose only filled-in field is its name would otherwise be swallowed
+      // as a heading, taking its whole group along.
+      if (nonEmpty(row) === 1 && !doneRaw.trim() && !struck) {
+        current = groupFor(label);
+        continue;
+      }
+      if (!current) current = groupFor("");
     }
 
     current.items.push({
