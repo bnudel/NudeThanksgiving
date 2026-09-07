@@ -4,9 +4,11 @@ import { test } from "node:test";
 import { normalizeColor, parseGrid, parseStyles, parseTabIndex, unwrapHref } from "./parse.ts";
 import {
   classify,
-  isPlaceLabel,
   coastAffinity,
   countStays,
+  countTodos,
+  isChecked,
+  isPlaceLabel,
   mergeActivityTabs,
   nameFromUrl,
   parseActivities,
@@ -14,7 +16,9 @@ import {
   parseLodging,
   parseRestaurants,
   parseSchedule,
+  parseTodos,
   placeOf,
+  resolveDayDate,
   slug,
   titleFor,
 } from "./model.ts";
@@ -837,6 +841,155 @@ test("classify identifies tabs by header shape, not tab name", () => {
     classify(of(page([row(td("s1", "Packing list") + td("s1", "Who"))]))),
     "generic",
     "an unrecognised new tab still renders as a table",
+  );
+});
+
+/* --------------------------------------------------- dates and locations */
+
+test("the year is solved from the weekday, since the sheet omits it", () => {
+  const nov2026 = new Date("2026-09-04T00:00:00Z");
+  // Nov 21 falls on a Saturday in 2026, not 2025 or 2027.
+  assert.equal(resolveDayDate("Saturday, November 21", nov2026), "2026-11-21");
+  assert.equal(resolveDayDate("Thursday, November 26", nov2026), "2026-11-26");
+  assert.equal(resolveDayDate("Sunday, November 29", nov2026), "2026-11-29");
+});
+
+test("a wrong weekday finds the year that actually matches", () => {
+  const ref = new Date("2026-09-04T00:00:00Z");
+  // Nov 21 is a Friday in 2025 — so this label resolves to 2025, not 2026.
+  assert.equal(resolveDayDate("Friday, November 21", ref), "2025-11-21");
+});
+
+test("resolveDayDate copes with no weekday and with nonsense", () => {
+  const ref = new Date("2026-09-04T00:00:00Z");
+  assert.equal(resolveDayDate("November 21", ref), "2026-11-21");
+  assert.equal(resolveDayDate("Somenonsense", ref), undefined);
+  assert.equal(resolveDayDate("", ref), undefined);
+});
+
+test("each day picks up the city it mostly happens in", () => {
+  const html = page([
+    row(
+      td("s1", "Day") + td("s1", "Summary") + td("s1", "Total Drive Time") +
+        td("s1", "9am") + td("s1", "10am") + td("s1", "11am") + td("s1", "12pm"),
+    ),
+    // Three coastal stops then one drive inland — the coast should win, as it
+    // does on the real 24th.
+    row(
+      td("s0", "Tuesday, November 24") + td("s0", "Coast to Portland") + td("s0", "2 Hours") +
+        td("s0", "Manzanita Beach Town") + td("s0", "Rockaway Beach") +
+        td("s0", "Tillamook Tour") + td("s0", "Drive to Portland"),
+    ),
+    // Entirely Portland-side.
+    row(
+      td("s0", "Wednesday, November 25") + td("s0", "Portland") + td("s0", "20 minutes") +
+        td("s0", "Japaneese Gardens") + td("s0", "Downtown Portland Shops") +
+        td("s0", "") + td("s0", ""),
+    ),
+  ]);
+  const s = parseSchedule({ gid: "1", name: "Schedule", rows: parseGrid(html) });
+
+  assert.equal(s.days[0].date, "2026-11-24");
+  assert.equal(s.days[0].city, "Cannon Beach, OR", "most of the 24th is on the coast");
+  assert.equal(s.days[1].city, "Portland, OR");
+});
+
+test("an evenly split day is credited to where it ends up", () => {
+  // Half coast, half Portland. The tie goes to the later location, since
+  // that's where the evening — and the night's weather — happens.
+  const html = page([
+    row(
+      td("s1", "Day") + td("s1", "Summary") + td("s1", "Total Drive Time") +
+        td("s1", "9am") + td("s1", "10am") + td("s1", "11am") + td("s1", "12pm"),
+    ),
+    row(
+      td("s0", "Tuesday, November 24") + td("s0", "Split") + td("s0", "2 Hours") +
+        td("s0", "Manzanita Beach Town") + td("s0", "Tillamook Tour") +
+        td("s0", "Drive to Portland") + td("s0", "Dinner in Portland"),
+    ),
+  ]);
+  const s = parseSchedule({ gid: "1", name: "Schedule", rows: parseGrid(html) });
+  assert.equal(s.days[0].city, "Portland, OR");
+});
+
+test("a day with no recognisable location has none, and no weather is forced", () => {
+  const html = page([
+    row(td("s1", "Day") + td("s1", "Summary") + td("s1", "Total Drive Time") + td("s1", "9am")),
+    row(td("s0", "Sunday, November 29") + td("s0", "Travel Day") + td("s0", "20 minutes") + td("s0", "K,T Leave")),
+  ]);
+  const s = parseSchedule({ gid: "1", name: "Schedule", rows: parseGrid(html) });
+  assert.equal(s.days[0].city, undefined);
+  assert.equal(s.days[0].date, "2026-11-29", "the date still resolves for daylight hours");
+});
+
+/* ---------------------------------------------------------------- to-do */
+
+const TODO_HTML = page([
+  row(
+    td("s1", "Type") + td("s1", "When?") + td("s1", "Who?") +
+      td("s1", "Done?") + td("s1", "Details if Booked") + td("s1", "Notes"),
+  ),
+  row(td("s1", "Activities") + blank(5)),
+  row(td("s0", "Japaneese Garden") + td("s0", "") + td("s0", "") + td("s0", "FALSE") + td("s0", "") + td("s0", "")),
+  row(td("s0", "Top Golf") + td("s0", "14 Days in Advance") + td("s0", "") + td("s0", "FALSE") + td("s0", "") + td("s0", "Can Book 14 days in advance")),
+  row(blank(6)),
+  row(td("s1", "Dinner Reservations") + blank(5)),
+  row(td("s0", "Oakshire Beer Hall") + td("s0", "Trivia Wed 7-9") + td("s0", "") + td("s0", "TRUE") + td("s0", "") + td("s0", "Arrive early")),
+  row(td("s0", "Order Thanksgiving Food") + td("s0", "October 25th") + td("s0", "") + td("s0", "FALSE") + td("s0", "") + td("s0", "")),
+  row(td("s1", "Rental Cars") + blank(5)),
+  row(td("s0", "Book Rental Car") + td("s0", "NOW") + td("s0", "Eric") + td("s0", "FALSE") + td("s0", "") + td("s0", "")),
+]);
+
+test("a Done? column makes the tab a to-do list", () => {
+  assert.equal(classify({ gid: "9", name: "To-Do List", rows: parseGrid(TODO_HTML) }), "todo");
+});
+
+test("to-do items group under their headings and read their checkboxes", () => {
+  const groups = parseTodos({ gid: "9", name: "To-Do List", rows: parseGrid(TODO_HTML) });
+
+  assert.deepEqual(
+    groups.map((g) => [g.name, g.items.length]),
+    [
+      ["Activities", 2],
+      ["Dinner Reservations", 2],
+      ["Rental Cars", 1],
+    ],
+  );
+
+  const oakshire = groups[1].items[0];
+  assert.equal(oakshire.task, "Oakshire Beer Hall");
+  assert.equal(oakshire.done, true, "TRUE is a ticked box");
+  assert.equal(oakshire.notes, "Arrive early");
+
+  assert.equal(groups[0].items[0].done, false, "FALSE is unticked");
+  assert.equal(groups[2].items[0].who, "Eric");
+  assert.equal(groups[2].items[0].when, "NOW");
+
+  assert.deepEqual(countTodos(groups), { done: 1, total: 5 });
+});
+
+test("checkboxes are recognised however the sheet publishes them", () => {
+  for (const yes of ["TRUE", "true", "Yes", "y", "DONE", "x", "✓", "☑"]) {
+    assert.ok(isChecked(yes), `${yes} should read as done`);
+  }
+  for (const no of ["FALSE", "false", "no", "", "  ", "maybe", "☐"]) {
+    assert.ok(!isChecked(no), `${no || "(blank)"} should read as not done`);
+  }
+});
+
+test("a real checkbox input is read as its checked state", () => {
+  const html = page([
+    row(td("s1", "Type") + td("s1", "Done?")),
+    row(td("s0", "Booked thing") + td("s0", '<input type="checkbox" checked disabled>')),
+    row(td("s0", "Unbooked thing") + td("s0", '<input type="checkbox" disabled>')),
+  ]);
+  const groups = parseTodos({ gid: "9", name: "To-Do List", rows: parseGrid(html) });
+  assert.deepEqual(
+    groups[0].items.map((t) => [t.task, t.done]),
+    [
+      ["Booked thing", true],
+      ["Unbooked thing", false],
+    ],
   );
 });
 

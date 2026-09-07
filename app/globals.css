@@ -770,91 +770,120 @@ main {
   line-height: 1.45;
 }
 
-/* --------------------------------------------------------------- weather */
+/* ----------------------------------------------- day conditions (schedule) */
 
-.weather {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-}
-
-.weather-place {
-  padding: 18px 16px;
-}
-
-.week {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 4px;
-  margin-top: 14px;
-}
-
-.wx {
+.day-cond {
+  margin-top: 10px;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 10px 2px;
-  border-radius: var(--radius-sm);
-  background: rgba(16, 36, 46, 0.4);
-  border: 1px solid var(--line-soft);
-}
-
-.wx-dow {
-  font-size: 10.5px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--foam);
-}
-
-.wx-date {
-  font-size: 10px;
-  color: var(--ink-faint);
-  margin-bottom: 3px;
-}
-
-.wx .sky {
-  margin: 2px 0 4px;
-}
-
-.sky-clear {
-  color: var(--lantern);
-}
-.sky-wet {
-  color: #9ec9dd;
-}
-.sky-grey {
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 12px;
   color: var(--ink-dim);
 }
 
-.wx-hi {
-  font-size: 14px;
+.cond-wx,
+.cond-sun {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cond-wx b {
   color: var(--foam);
-  font-variant-numeric: tabular-nums;
+  font-weight: 400;
 }
 
-.wx-lo {
-  font-size: 12px;
+.cond-lo {
   color: var(--ink-faint);
-  font-variant-numeric: tabular-nums;
 }
 
-.wx-chance {
-  font-size: 10px;
-  color: var(--ink-faint);
-  min-height: 13px;
-  font-variant-numeric: tabular-nums;
-}
-
-.wx-chance.is-wet {
+.cond-rain {
   color: #9ec9dd;
 }
 
-@media (max-width: 520px) {
-  .week {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 6px;
-  }
+.cond-sep {
+  color: var(--ink-faint);
+}
+
+.g-sun {
+  color: var(--lantern);
+  flex: none;
+}
+.g-wet {
+  color: #9ec9dd;
+  flex: none;
+}
+.g-grey {
+  color: var(--ink-faint);
+  flex: none;
+}
+
+/* ------------------------------------------------------------------- todo */
+
+.todo {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  border: 1px solid var(--line-soft);
+}
+
+.box {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  border-radius: 5px;
+  border: 1.5px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--abyss);
+}
+
+.box.is-done {
+  background: var(--moss-bright);
+  border-color: var(--moss-bright);
+}
+
+.todo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.todo-task {
+  font-size: 14.5px;
+  color: var(--foam);
+}
+
+.todo-item.is-done .todo-task {
+  color: var(--ink-faint);
+  text-decoration: line-through;
+  text-decoration-color: rgba(138, 162, 166, 0.6);
+}
+
+.todo-item.is-done .pill {
+  opacity: 0.55;
 }
 
 /* ----------------------------------------------------------------- table */

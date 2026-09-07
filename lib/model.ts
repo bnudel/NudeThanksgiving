@@ -48,6 +48,7 @@ export type TabKind =
   | "activities"
   | "restaurants"
   | "payments"
+  | "todo"
   | "generic";
 
 /**
@@ -62,6 +63,7 @@ export function classify(tab: Tab): TabKind {
   if (rowHas(header, "Things to do") || rowHas(header, "Hike Name")) return "activities";
   if (rowHas(header, "Name") && (rowHas(header, "Arrival Day") || rowHas(header, "Depart Day")))
     return "flights";
+  if (rowHas(header, "Done?") || rowHas(header, "Done")) return "todo";
   if (rowHas(header, "How Much")) return "payments";
   if (rowHas(header, "Name", "Location", "Notes")) return "restaurants";
   return "generic";
@@ -109,8 +111,71 @@ export type ScheduleDay = {
   label: string;
   summary: string;
   driveTime: string;
+  /** ISO date resolved from the label, e.g. "2026-11-21". */
+  date?: string;
+  /** Where most of the day happens, for weather and daylight. */
+  city?: string;
   events: ScheduleEvent[];
 };
+
+const MONTHS = [
+  "january", "february", "march", "april", "may", "june",
+  "july", "august", "september", "october", "november", "december",
+];
+
+/**
+ * "Saturday, November 21" -> "2026-11-21".
+ *
+ * The sheet doesn't carry a year, so we solve for it: pick the nearby year
+ * where that date actually falls on the named weekday. Self-correcting if the
+ * trip ever moves.
+ */
+export function resolveDayDate(label: string, today = new Date()): string | undefined {
+  const m = label.match(/(?:([a-z]+)\s*,\s*)?([a-z]+)\.?\s+(\d{1,2})/i);
+  if (!m) return undefined;
+  const [, dow, monthName, dayStr] = m;
+  const month = MONTHS.indexOf(monthName.toLowerCase());
+  if (month < 0) return undefined;
+
+  const day = Number(dayStr);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const base = today.getUTCFullYear();
+
+  for (let y = base - 1; y <= base + 3; y++) {
+    const d = new Date(Date.UTC(y, month, day));
+    if (d.getUTCMonth() !== month || d.getUTCDate() !== day) continue;
+    if (!dow) {
+      // No weekday to match on: take the first occurrence not in the past.
+      if (d.valueOf() >= Date.UTC(base, today.getUTCMonth(), today.getUTCDate())) return iso(d);
+      continue;
+    }
+    const name = d.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
+    if (name.toLowerCase() === dow.toLowerCase()) return iso(d);
+  }
+  return undefined;
+}
+
+/** The city most of a day's entries sit in; ties go to where the day ends. */
+function dominantCity(events: ScheduleEvent[]): string | undefined {
+  const tally = new Map<string, number>();
+  let last: string | undefined;
+  for (const e of events) {
+    if (!e.city) continue;
+    tally.set(e.city, (tally.get(e.city) ?? 0) + e.span);
+    last = e.city;
+  }
+  if (tally.size === 0) return undefined;
+
+  let best: string | undefined;
+  let bestCount = -1;
+  for (const [city, count] of tally) {
+    if (count > bestCount || (count === bestCount && city === last)) {
+      best = city;
+      bestCount = count;
+    }
+  }
+  return best;
+}
 
 export type LegendEntry = { label: string; bg: string; fg: string };
 
@@ -242,6 +307,8 @@ export function parseSchedule(tab: Tab): Schedule {
         cityFromText(event.text) ||
         undefined;
     }
+    day.date = resolveDayDate(day.label);
+    day.city = dominantCity(day.events);
   }
 
   return { days, types, cities };
@@ -654,6 +721,91 @@ export function parsePayments(tab: Tab): Payment[] {
     .slice(i + 1)
     .filter((r) => nonEmpty(r) > 0)
     .map((r) => ({ date: txt(r, 0), what: txt(r, 1), amount: txt(r, 2) }));
+}
+
+/* ---------------------------------------------------------------------- todo */
+
+export type TodoItem = {
+  task: string;
+  when: string;
+  who: string;
+  done: boolean;
+  details: string;
+  notes: string;
+};
+
+export type TodoGroup = { name: string; items: TodoItem[] };
+
+/**
+ * A Google Sheets checkbox publishes as TRUE/FALSE, but depending on the
+ * sheet it can also come through as a glyph or a real checkbox input. Accept
+ * all of them so a ticked box always reads as done.
+ */
+export function isChecked(value: string): boolean {
+  const v = value.trim().toLowerCase();
+  return (
+    v === "true" ||
+    v === "yes" ||
+    v === "y" ||
+    v === "done" ||
+    v === "x" ||
+    v === "✓" ||
+    v === "✔" ||
+    v === "☑" ||
+    v === "☒"
+  );
+}
+
+export function parseTodos(tab: Tab): TodoGroup[] {
+  const i = headerIndex(tab.rows);
+  if (i < 0) return [];
+  const columns = columnsOf(tab.rows[i]);
+  const taskAt = columns[norm("Type")] ?? columns[norm("Task")] ?? 0;
+
+  const groups: TodoGroup[] = [];
+  let current: TodoGroup | null = null;
+
+  for (const row of tab.rows.slice(i + 1)) {
+    if (!nonEmpty(row)) continue;
+
+    const label = txt(row, taskAt);
+    if (!label) continue;
+
+    // A lone cell on a row is a section heading, not a task.
+    if (nonEmpty(row) === 1) {
+      current = { name: label, items: [] };
+      groups.push(current);
+      continue;
+    }
+
+    if (!current) {
+      current = { name: "", items: [] };
+      groups.push(current);
+    }
+
+    current.items.push({
+      task: label,
+      when: col(row, columns, "When?", "When", "Deadline"),
+      who: col(row, columns, "Who?", "Who", "Owner"),
+      done: isChecked(col(row, columns, "Done?", "Done", "Complete")),
+      details: col(row, columns, "Details if Booked", "Details"),
+      notes: col(row, columns, "Notes"),
+    });
+  }
+
+  return groups.filter((g) => g.items.length > 0);
+}
+
+export function countTodos(groups: TodoGroup[]): { done: number; total: number } {
+  let done = 0;
+  let total = 0;
+  for (const g of groups) {
+    for (const item of g.items) {
+      total += 1;
+      if (item.done) done += 1;
+    }
+  }
+  return { done, total };
 }
 
 /* ------------------------------------------------------------------- generic */

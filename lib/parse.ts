@@ -220,8 +220,15 @@ export function parseGrid(html: string, styles: StyleMap = parseStyles(html)): C
         inlineStyle.match(/(?:^|;)\s*color\s*:\s*([^;]+)/i)?.[1],
         "#000000",
       );
+      // Some sheets publish checkboxes as a real input rather than TRUE/FALSE.
+      const checkbox = /<input[^>]*type=["']?checkbox/i.test(inner)
+        ? /<input[^>]*\bchecked\b/i.test(inner)
+          ? "TRUE"
+          : "FALSE"
+        : null;
+
       row.push({
-        text: stripTags(inner),
+        text: checkbox ?? stripTags(inner),
         bg: inlineBg || style.bg,
         fg: inlineFg || style.fg,
         bold: style.bold || /<(b|strong)\b/i.test(inner),

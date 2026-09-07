@@ -121,6 +121,7 @@ renaming a tab won't break anything:
 | `Name` + `Arrival Day` / `Depart Day` | Per-person flight cards, arrivals + departures merged |
 | `Things to do` | Activity cards with rank, reservation flag, notes |
 | `Hike Name` | Folded into the things-to-do lists, tagged as a hike |
+| `Done?` | To-do list, grouped, with checkboxes crossed off |
 | `Date` + `What` + `How Much` | Payments table |
 | `Name` + `Location` + `Notes` | Restaurant cards with cuisine, trivia and hours pills |
 | anything else | A plain styled table |
@@ -165,20 +166,37 @@ won't misroute anything.
 Adding a third things-to-do tab is fine; it just won't receive hikes. Deleting
 the Hikes tab is also fine — the two lists carry on unchanged.
 
-### Weather
+### Weather and daylight, per day
 
-A seven-day forecast for Cannon Beach and Portland, from
-[Open-Meteo](https://open-meteo.com) — free, no API key, no account. Fetched
-server-side and cached for 30 minutes. It isn't a spreadsheet tab; the section
-is slotted in after the schedule.
+Each schedule day shows conditions for **wherever that day actually happens** —
+not one forecast for the whole trip. The day's location comes from the city
+tags on its entries, weighted by how many hours each covers, so the 24th reads
+as coast (three coastal stops, one drive inland) while the 25th reads as
+Portland. Ties go to where the day ends. Vancouver days use the Portland
+station, since the weather is the same.
 
-If the API is down or returns something unexpected, the section says so and the
-rest of the page is unaffected. Coordinates and the place list live in
-`lib/weather.ts`.
+**Sunrise and sunset are computed, not fetched** (`lib/sun.ts`, NOAA sunrise
+equation). Forecast APIs stop at ~16 days, but daylight is astronomy, so every
+trip day shows its hours no matter how far out — currently around 7:25am to
+4:40pm on the coast, a little over nine hours.
 
-Until early November the trip dates are outside forecast range, so this shows
-the coming week rather than Thanksgiving. It becomes the trip forecast on its
-own — no change needed.
+**The forecast** comes from [Open-Meteo](https://open-meteo.com) — free, no API
+key — for Cannon Beach and Portland, cached 30 minutes, requesting the full
+16-day window. Until roughly 10 November the trip is out of range, so days show
+daylight only and the temperature appears on its own once it's available. If
+the API is down the schedule simply renders without it.
+
+### The to-do list
+
+Structure it like the lodging tab: a group name alone on a row (`Activities`,
+`Dinner Reservations`, `Rental Cars`…), then one row per task. Recognised
+columns are `Type` (the task), `When?`, `Who?`, `Done?`, `Details if Booked`
+and `Notes` — all optional except the task.
+
+Tick a checkbox in the sheet and the item crosses off here, with a filled box
+and the group header counting done-of-total. Google publishes checkboxes as
+`TRUE`/`FALSE`, but glyphs (`✓`, `☑`), `yes`, `x`, `done` and real checkbox
+inputs are all accepted too, so it works however your sheet exports.
 
 ### Lodging
 

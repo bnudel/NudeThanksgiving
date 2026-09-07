@@ -52,7 +52,9 @@ async function fetchPlace(place: Place): Promise<PlaceForecast | null> {
     `${ENDPOINT}?latitude=${place.lat}&longitude=${place.lon}` +
     `&daily=${DAILY}` +
     `&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch` +
-    `&timezone=America%2FLos_Angeles&forecast_days=7`;
+    // 16 days is Open-Meteo's maximum. The trip is further out than that
+    // today; this fills in on its own as November approaches.
+    `&timezone=America%2FLos_Angeles&forecast_days=16`;
 
   try {
     const res = await fetch(url, { next: { revalidate: 1800 } });
@@ -63,7 +65,7 @@ async function fetchPlace(place: Place): Promise<PlaceForecast | null> {
     const time = daily?.time;
     if (!daily || !Array.isArray(time) || time.length === 0) return null;
 
-    const days: DayWeather[] = time.slice(0, 7).map((date, i) => ({
+    const days: DayWeather[] = time.map((date, i) => ({
       date: String(date),
       code: column(daily, "weather_code", i) ?? 3,
       hi: column(daily, "temperature_2m_max", i),
@@ -83,6 +85,29 @@ async function fetchPlace(place: Place): Promise<PlaceForecast | null> {
 export async function fetchForecasts(): Promise<PlaceForecast[]> {
   const results = await Promise.all(PLACES.map(fetchPlace));
   return results.filter((r): r is PlaceForecast => r !== null);
+}
+
+/* ------------------------------------------------------ per-day lookup */
+
+/**
+ * Which forecast station covers a schedule day's city. Vancouver's weather is
+ * effectively Portland's, so it maps there rather than warranting its own
+ * request.
+ */
+export function placeForCity(city: string | undefined): Place {
+  return city && /cannon|seaside|coast|manzanita|rockaway|tillamook/i.test(city)
+    ? PLACES[0]
+    : PLACES[1];
+}
+
+/** The forecast for one place on one ISO date, if it's within range. */
+export function lookup(
+  forecasts: PlaceForecast[],
+  place: string,
+  date: string | undefined,
+): DayWeather | undefined {
+  if (!date) return undefined;
+  return forecasts.find((f) => f.place === place)?.days.find((d) => d.date === date);
 }
 
 /* ------------------------------------------------------------- WMO codes */

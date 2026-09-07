@@ -3,7 +3,6 @@ import Countdown from "@/components/Countdown";
 import ActivityTabs, { type ActivityList } from "@/components/ActivityTabs";
 import Haystack from "@/components/Haystack";
 import PaymentsGate from "@/components/PaymentsGate";
-import Weather from "@/components/Weather";
 import {
   FlightsView,
   GenericView,
@@ -11,10 +10,12 @@ import {
   RestaurantsView,
   ScheduleView,
   Section,
+  TodoView,
 } from "@/components/sections";
 import {
   classify,
   countStays,
+  countTodos,
   mergeActivityTabs,
   parseActivities,
   parseFlights,
@@ -22,11 +23,13 @@ import {
   parseLodging,
   parseRestaurants,
   parseSchedule,
+  parseTodos,
   slug,
   titleFor,
   type TabKind,
 } from "@/lib/model";
 import { EDIT_URL, fetchWorkbook, REVALIDATE, type Tab } from "@/lib/sheet";
+import { fetchForecasts, type PlaceForecast } from "@/lib/weather";
 
 export const revalidate = 300;
 
@@ -84,14 +87,23 @@ function buildIndex(tabs: Tab[]): Entry[] {
   return entries;
 }
 
-function renderTab({ tab, kind, title, id, lists }: Entry) {
+function renderTab({ tab, kind, title, id, lists }: Entry, forecasts: PlaceForecast[]) {
   const tabName = title;
   switch (kind) {
     case "schedule": {
       const schedule = parseSchedule(tab);
       return (
         <Section key={id} id={id} title={tabName} count={`${schedule.days.length} days`}>
-          <ScheduleView schedule={schedule} />
+          <ScheduleView schedule={schedule} forecasts={forecasts} />
+        </Section>
+      );
+    }
+    case "todo": {
+      const groups = parseTodos(tab);
+      const { done, total } = countTodos(groups);
+      return (
+        <Section key={id} id={id} title={tabName} count={`${done} of ${total} done`}>
+          <TodoView groups={groups} />
         </Section>
       );
     }
@@ -203,23 +215,13 @@ export default async function Page() {
 
   const sections = buildIndex(tabs);
 
-  // Weather isn't a spreadsheet tab, so it's slotted in after the schedule
-  // (or at the end if there isn't one).
-  const scheduleAt = sections.findIndex((s) => s.kind === "schedule");
-  const weatherAfter = scheduleAt >= 0 ? scheduleAt : sections.length - 1;
+  // Weather lives inside the schedule now — each day shows the forecast for
+  // wherever that day happens. A weather outage yields an empty list and the
+  // schedule simply renders without it.
+  const forecasts = await fetchForecasts();
 
-  const navItems = sections.flatMap((s, i) =>
-    i === weatherAfter
-      ? [
-          { id: s.id, title: s.title },
-          { id: "weather", title: "Weather" },
-        ]
-      : [{ id: s.id, title: s.title }],
-  );
-
-  const body = sections.flatMap((s, i) =>
-    i === weatherAfter ? [renderTab(s), <Weather key="weather" />] : [renderTab(s)],
-  );
+  const navItems = sections.map((s) => ({ id: s.id, title: s.title }));
+  const body = sections.map((s) => renderTab(s, forecasts));
 
   return (
     <>

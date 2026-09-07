@@ -7,9 +7,13 @@ import type {
   Payment,
   Restaurant,
   Schedule,
+  ScheduleDay,
   Stay,
+  TodoGroup,
   Traveler,
 } from "@/lib/model";
+import { formatTime, sunTimes } from "@/lib/sun";
+import { describe, lookup, placeForCity, type PlaceForecast, type Sky } from "@/lib/weather";
 
 /* --------------------------------------------------------------- shared UI */
 
@@ -57,6 +61,64 @@ function accent(hex: string): string {
   return `rgb(${lift(r)}, ${lift(g)}, ${lift(b)})`;
 }
 
+const glyph = {
+  viewBox: "0 0 24 24",
+  width: 14,
+  height: 14,
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.7,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  "aria-hidden": true,
+};
+
+function SkyGlyph({ sky }: { sky: Sky }) {
+  const cloud = <path d="M6.5 18h11a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6-1.2A3.4 3.4 0 0 0 6.5 18Z" />;
+  if (sky === "clear")
+    return (
+      <svg {...glyph} className="g-sun">
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" />
+      </svg>
+    );
+  if (sky === "partly")
+    return (
+      <svg {...glyph} className="g-sun">
+        <circle cx="8.5" cy="8" r="3" />
+        <path d="M9 19h8a3 3 0 0 0 .2-6 4.3 4.3 0 0 0-8.2-1A3 3 0 0 0 9 19Z" />
+      </svg>
+    );
+  if (sky === "rain" || sky === "drizzle" || sky === "storm")
+    return (
+      <svg {...glyph} className="g-wet">
+        {cloud}
+        <path d="M9 20v2M13 20v2M17 20v2" />
+      </svg>
+    );
+  if (sky === "fog")
+    return (
+      <svg {...glyph} className="g-grey">
+        <path d="M4 9h16M6 13h12M4 17h16" />
+      </svg>
+    );
+  return (
+    <svg {...glyph} className="g-grey">
+      {cloud}
+    </svg>
+  );
+}
+
+function SunUpGlyph() {
+  return (
+    <svg {...glyph} className="g-sun">
+      <path d="M4 18h16" />
+      <path d="M12 5v5M8.5 11 12 7.5 15.5 11" />
+      <path d="M6 14.5h1.5M16.5 14.5H18" />
+    </svg>
+  );
+}
+
 function DriveIcon() {
   return (
     <svg
@@ -76,7 +138,53 @@ function DriveIcon() {
   );
 }
 
-export function ScheduleView({ schedule }: { schedule: Schedule }) {
+/** Weather and daylight for one schedule day, at that day's location. */
+function DayConditions({
+  day,
+  forecasts,
+}: {
+  day: ScheduleDay;
+  forecasts: PlaceForecast[];
+}) {
+  const place = placeForCity(day.city);
+  const wx = lookup(forecasts, place.name, day.date);
+  const sun = day.date
+    ? sunTimes(new Date(`${day.date}T12:00:00Z`), place.lat, place.lon)
+    : null;
+
+  if (!wx && !sun) return null;
+
+  return (
+    <div className="day-cond">
+      {wx && (
+        <span className="cond-wx" title={describe(wx.code).label}>
+          <SkyGlyph sky={describe(wx.code).sky} />
+          {wx.hi !== null && <b>{Math.round(wx.hi)}°</b>}
+          {wx.lo !== null && <span className="cond-lo">{Math.round(wx.lo)}°</span>}
+          {wx.chance !== null && wx.chance >= 30 && (
+            <span className="cond-rain">{Math.round(wx.chance)}%</span>
+          )}
+        </span>
+      )}
+      {sun && (
+        <span className="cond-sun" title={`Daylight in ${place.name}`}>
+          <SunUpGlyph />
+          {formatTime(sun.sunrise)}
+          <span className="cond-sep">–</span>
+          {formatTime(sun.sunset)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function ScheduleView({
+  schedule,
+  forecasts = [],
+}: {
+  schedule: Schedule;
+  forecasts?: PlaceForecast[];
+}) {
   const { days, types, cities } = schedule;
   const cityColor = new Map(cities.map((c) => [c.label, accent(c.fg)]));
 
@@ -122,6 +230,7 @@ export function ScheduleView({ schedule }: { schedule: Schedule }) {
                     {d.driveTime}
                   </div>
                 )}
+                <DayConditions day={d} forecasts={forecasts} />
               </div>
               <div className="events">
                 {d.events.length === 0 ? (
@@ -367,6 +476,63 @@ export function RestaurantsView({ items }: { items: Restaurant[] }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- todo */
+
+function CheckMark({ done }: { done: boolean }) {
+  return (
+    <span className={`box${done ? " is-done" : ""}`} aria-hidden>
+      {done && (
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 12.5 10 17.5 19 7" />
+        </svg>
+      )}
+    </span>
+  );
+}
+
+export function TodoView({ groups }: { groups: TodoGroup[] }) {
+  if (!groups.length) return <Empty>Nothing on the list yet.</Empty>;
+
+  return (
+    <div className="todo">
+      {groups.map((group, gi) => {
+        const done = group.items.filter((t) => t.done).length;
+        return (
+          <div className="todo-group" key={gi}>
+            <div className="group-head">
+              <h3>{group.name || "To do"}</h3>
+              <span className="count">
+                {done} of {group.items.length} done
+              </span>
+            </div>
+            <ul className="todo-list">
+              {group.items.map((t, i) => (
+                <li className={`todo-item${t.done ? " is-done" : ""}`} key={i}>
+                  <CheckMark done={t.done} />
+                  <div className="todo-body">
+                    <span className="todo-task">{t.task}</span>
+                    {(t.when || t.who || t.details) && (
+                      <span className="stay-meta">
+                        {t.who && <span className="pill">{t.who}</span>}
+                        {t.when && <span className="pill warn">{t.when}</span>}
+                        {t.details && <span className="pill good">{t.details}</span>}
+                      </span>
+                    )}
+                    {t.notes && <span className="act-notes">{t.notes}</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+      <p className="faint" style={{ marginTop: 4 }}>
+        Tick the boxes in the spreadsheet and they&rsquo;ll cross off here.
+      </p>
     </div>
   );
 }
