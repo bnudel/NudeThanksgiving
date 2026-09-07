@@ -1,27 +1,29 @@
 :root {
-  /* Rainy Oregon coast: wet basalt, sea fog, moss, and a warm lantern glow. */
-  --abyss: #0a1216;
-  --deep: #0e1a20;
-  --basalt: #16262e;
-  --slate: #1e3540;
-  --tide: #2b4b58;
-  --moss: #4f7d68;
-  --moss-bright: #6fa98b;
-  --fog: #b9c9c8;
-  --mist: #dce7e4;
-  --foam: #f2f7f5;
-  --lantern: #e0a05a;
-  --lantern-soft: #f0c99b;
-  --ember: #c9704a;
+  /* Oregon coast with the weather breaking: wet basalt and sea fog, but with
+     sun coming through. Same family as before, lifted a few stops. */
+  --abyss: #10242e;
+  --deep: #19353f;
+  --basalt: #1e3b46;
+  --slate: #2a4d5b;
+  --tide: #386474;
+  --moss: #5b8f76;
+  --moss-bright: #86c1a2;
+  --fog: #c8d7d4;
+  --mist: #e3edea;
+  --foam: #f5faf8;
+  --lantern: #f0b26a;
+  --lantern-soft: #f8d6a8;
+  --sun: #ffd9a0;
+  --ember: #e79a76;
 
   --ink: var(--foam);
-  --ink-dim: #9db0b3;
-  --ink-faint: #6d8288;
+  --ink-dim: #b3c6c7;
+  --ink-faint: #8aa2a6;
 
-  --card: rgba(22, 38, 46, 0.72);
-  --card-hi: rgba(30, 53, 64, 0.85);
-  --line: rgba(185, 201, 200, 0.16);
-  --line-soft: rgba(185, 201, 200, 0.09);
+  --card: rgba(30, 59, 70, 0.66);
+  --card-hi: rgba(42, 77, 91, 0.8);
+  --line: rgba(210, 228, 226, 0.2);
+  --line-soft: rgba(210, 228, 226, 0.11);
 
   --radius: 16px;
   --radius-sm: 10px;
@@ -43,9 +45,11 @@ body {
 
 body {
   background:
-    radial-gradient(1200px 700px at 70% -10%, rgba(43, 75, 88, 0.55), transparent 60%),
-    radial-gradient(900px 600px at 10% 10%, rgba(79, 125, 104, 0.22), transparent 65%),
-    linear-gradient(180deg, var(--deep) 0%, var(--abyss) 55%, #060d10 100%);
+    /* Sun breaking through, upper right — warm and diffuse. */
+    radial-gradient(760px 520px at 80% 4%, rgba(255, 217, 160, 0.34), transparent 62%),
+    radial-gradient(1500px 760px at 72% -6%, rgba(120, 176, 190, 0.4), transparent 66%),
+    radial-gradient(900px 620px at 8% 14%, rgba(91, 143, 118, 0.24), transparent 68%),
+    linear-gradient(180deg, #23495a 0%, var(--deep) 34%, var(--abyss) 74%, #0c1c24 100%);
   background-attachment: fixed;
   color: var(--ink);
   font-family: var(--sans);
@@ -86,7 +90,8 @@ h3 {
   pointer-events: none;
   z-index: 1;
   overflow: hidden;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.15) 70%, transparent);
+  /* Lighter drizzle than before: fades out well before mid-page. */
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.08) 55%, transparent);
 }
 
 .drop {
@@ -94,7 +99,7 @@ h3 {
   top: -20vh;
   width: 1px;
   height: 90px;
-  background: linear-gradient(180deg, transparent, rgba(210, 232, 232, 0.5));
+  background: linear-gradient(180deg, transparent, rgba(226, 244, 244, 0.45));
   animation: fall linear infinite;
 }
 
@@ -113,19 +118,19 @@ h3 {
   z-index: 0;
   background: radial-gradient(
     ellipse at center,
-    rgba(185, 201, 200, 0.13),
-    rgba(185, 201, 200, 0) 68%
+    rgba(226, 240, 236, 0.16),
+    rgba(226, 240, 236, 0) 68%
   );
   animation: drift 46s ease-in-out infinite alternate;
 }
 .fog.low {
   bottom: -18vh;
   animation-duration: 63s;
-  opacity: 0.75;
+  opacity: 0.6;
 }
 .fog.high {
   top: 12vh;
-  opacity: 0.5;
+  opacity: 0.42;
   animation-direction: alternate-reverse;
 }
 
@@ -138,9 +143,37 @@ h3 {
   }
 }
 
+/* Water sliding down the falls */
+.fall-streaks line {
+  animation: sluice 1.5s linear infinite;
+}
+.fall-streaks line:nth-child(2) {
+  animation-duration: 1.15s;
+  animation-delay: -0.4s;
+}
+.fall-streaks line:nth-child(3) {
+  animation-duration: 1.8s;
+  animation-delay: -0.8s;
+}
+
+@keyframes sluice {
+  from {
+    transform: translateY(-14px);
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.5;
+  }
+  to {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .drop,
-  .fog {
+  .fog,
+  .fall-streaks line {
     animation: none;
   }
   .rain {
@@ -195,11 +228,9 @@ h3 {
   color: var(--lantern-soft);
 }
 
-.hero-sub {
-  margin-top: 20px;
-  font-size: clamp(1rem, 2.4vw, 1.2rem);
-  color: var(--fog);
-  max-width: 46ch;
+/* The countdown sits directly under the title now. */
+.hero h1 + .countdown {
+  margin-top: 32px;
 }
 
 .haystack {
@@ -398,6 +429,24 @@ main {
   color: var(--lantern-soft);
 }
 
+.day-drive {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-dim);
+  background: rgba(10, 18, 22, 0.45);
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  padding: 4px 11px 4px 9px;
+}
+
+.day-drive svg {
+  color: var(--moss-bright);
+  flex: none;
+}
+
 .day-thanksgiving .day-label {
   color: var(--lantern);
 }
@@ -467,6 +516,28 @@ main {
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.25);
   flex: none;
+}
+
+/* Cities are keyed by text colour, so their swatch is an outline, not a fill. */
+.swatch-city {
+  background: transparent;
+  border-width: 2px;
+  border-radius: 999px;
+}
+
+.event-city {
+  border-style: dashed;
+}
+
+.pill.cuisine {
+  color: var(--lantern-soft);
+  border-color: rgba(224, 160, 90, 0.4);
+}
+
+.pill.trivia {
+  color: var(--moss-bright);
+  border-color: rgba(111, 169, 139, 0.5);
+  background: rgba(79, 125, 104, 0.18);
 }
 
 @media (max-width: 720px) {

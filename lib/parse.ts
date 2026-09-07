@@ -11,6 +11,12 @@ export type Cell = {
   text: string;
   /** Normalized background colour, e.g. "#ffe599". "" means default/white. */
   bg: string;
+  /**
+   * Normalized text colour, e.g. "#c00000". "" means default/black. The
+   * schedule uses fill for the activity type and text colour for the city,
+   * so both channels have to be read.
+   */
+  fg: string;
   bold: boolean;
   colspan: number;
   href?: string;
@@ -48,8 +54,13 @@ function attr(attrs: string, name: string): string | undefined {
   return m ? decodeEntities(m[1]) : undefined;
 }
 
-/** "#FFF" | "rgb(255,255,255)" -> "#ffffff". White and none return "". */
-export function normalizeColor(raw: string | undefined): string {
+/**
+ * "#FFF" | "rgb(255,255,255)" -> "#ffffff".
+ *
+ * `blank` is the value that counts as "no colour set" and returns "": white
+ * for fills, black for text.
+ */
+export function normalizeColor(raw: string | undefined, blank = "#ffffff"): string {
   if (!raw) return "";
   const v = raw.trim().toLowerCase();
   if (!v || v === "transparent" || v === "none") return "";
@@ -74,8 +85,8 @@ export function normalizeColor(raw: string | undefined): string {
   } else {
     return "";
   }
-  // Treat white as "no fill" so unstyled cells never read as a category.
-  return hex === "#ffffff" ? "" : hex;
+  // Unstyled cells must never read as a category.
+  return hex === blank ? "" : hex;
 }
 
 /** Google rewrites outbound links as /url?q=<real>&sa=... — unwrap them. */
@@ -100,7 +111,7 @@ export function unwrapHref(href: string | undefined): string | undefined {
 
 /* ------------------------------------------------------------------ styles */
 
-export type StyleMap = Record<string, { bg: string; bold: boolean }>;
+export type StyleMap = Record<string, { bg: string; fg: string; bold: boolean }>;
 
 /** Read `.ritz .waffle .s3{background-color:#ffe599;...}` rules. */
 export function parseStyles(html: string): StyleMap {
@@ -113,9 +124,13 @@ export function parseStyles(html: string): StyleMap {
   while ((m = re.exec(css)) !== null) {
     const [, cls, body] = m;
     const bg = body.match(/background-color\s*:\s*([^;]+)/i)?.[1];
+    // `color:` but not `background-color:` — the negative lookbehind keeps
+    // the two from colliding.
+    const fg = body.match(/(?:^|;)\s*color\s*:\s*([^;]+)/i)?.[1];
     const weight = body.match(/font-weight\s*:\s*([^;]+)/i)?.[1]?.trim();
     map[cls] = {
       bg: normalizeColor(bg),
+      fg: normalizeColor(fg, "#000000"),
       bold: weight === "bold" || Number(weight) >= 600,
     };
   }
@@ -196,13 +211,19 @@ export function parseGrid(html: string, styles: StyleMap = parseStyles(html)): C
       const isSpacer = /freezebar/i.test(classAttr) || (!cls && !stripTags(inner));
       if (isSpacer) continue;
 
-      const style = (cls && styles[cls]) || { bg: "", bold: false };
+      const style = (cls && styles[cls]) || { bg: "", fg: "", bold: false };
+      const inlineStyle = attr(attrs, "style") ?? "";
       const inlineBg = normalizeColor(
-        (attr(attrs, "style") ?? "").match(/background-color\s*:\s*([^;]+)/i)?.[1],
+        inlineStyle.match(/background-color\s*:\s*([^;]+)/i)?.[1],
+      );
+      const inlineFg = normalizeColor(
+        inlineStyle.match(/(?:^|;)\s*color\s*:\s*([^;]+)/i)?.[1],
+        "#000000",
       );
       row.push({
         text: stripTags(inner),
         bg: inlineBg || style.bg,
+        fg: inlineFg || style.fg,
         bold: style.bold || /<(b|strong)\b/i.test(inner),
         colspan: Number(attr(attrs, "colspan") ?? 1) || 1,
         href: unwrapHref(inner.match(/<a[^>]*\shref\s*=\s*"([^"]*)"/i)?.[1]),

@@ -96,6 +96,11 @@ export type ScheduleEvent = {
   time: string;
   text: string;
   bg: string;
+  fg: string;
+  /** Activity type from the colour key, e.g. "Hiking". */
+  type?: string;
+  /** City from the colour key, e.g. "Portland, OR". */
+  city?: string;
   /** How many hour columns the entry spans. */
   span: number;
 };
@@ -103,55 +108,131 @@ export type ScheduleEvent = {
 export type ScheduleDay = {
   label: string;
   summary: string;
+  driveTime: string;
   events: ScheduleEvent[];
 };
 
-export type LegendEntry = { label: string; bg: string };
+export type LegendEntry = { label: string; bg: string; fg: string };
 
 export type Schedule = {
   days: ScheduleDay[];
-  legend: LegendEntry[];
+  /** Fill colours: what kind of activity it is. */
+  types: LegendEntry[];
+  /** Text colours: which city it's in. */
+  cities: LegendEntry[];
 };
+
+const HOUR = /^\d{1,2}\s*(am|pm)$/i;
+
+/**
+ * Expand a row into absolute column slots so merged cells don't shift
+ * anything. A cell sits at its starting column; the columns it spans are
+ * left empty.
+ */
+function byColumn(row: Cell[]): (Cell | undefined)[] {
+  const out: (Cell | undefined)[] = [];
+  let i = 0;
+  for (const cell of row) {
+    out[i] = cell;
+    i += cell.colspan;
+  }
+  return out;
+}
+
+/** Place names used to guess a city when the colour doesn't resolve. */
+const CITY_HINTS: [RegExp, string][] = [
+  [/cannon beach|seaside|ecola|hug point|short sand|manzanita|wheeler|rockway|rockaway|tillamoolk|tillamook|arch cape/i, "Cannon Beach, OR"],
+  [/vancouver|beacon rock|bonneville|hot springs|big al/i, "Vancouver, WA"],
+  [/portland|pdx|japaneese|japanese garden|hopscotch|aerial tram|din thai|din tai|top golf|saturday market|winery|quarterworld|kingpins/i, "Portland, OR"],
+];
+
+function cityFromText(text: string): string | undefined {
+  for (const [re, city] of CITY_HINTS) if (re.test(text)) return city;
+  return undefined;
+}
 
 export function parseSchedule(tab: Tab): Schedule {
   const rows = tab.rows;
   const hIdx = rows.findIndex((r) => rowHas(r, "Day", "Summary"));
-  if (hIdx < 0) return { days: [], legend: [] };
+  if (hIdx < 0) return { days: [], types: [], cities: [] };
 
-  const header = rows[hIdx];
-  // Column 0 = Day, column 1 = Summary, columns 2+ = hours.
-  const hours = header.slice(2).map((c) => c.text);
+  // Hour columns are found by their heading ("7am"), so inserting a column
+  // like "Total Drive Time" can't shift the timeline.
+  const header = byColumn(rows[hIdx]);
+  const hourLabel = new Map<number, string>();
+  let firstHour = Number.POSITIVE_INFINITY;
+  header.forEach((cell, i) => {
+    if (cell && HOUR.test(cell.text.trim())) {
+      hourLabel.set(i, cell.text.trim());
+      firstHour = Math.min(firstHour, i);
+    }
+  });
+
+  const indexOf = (...names: string[]) => {
+    for (const name of names) {
+      const i = header.findIndex((c) => c && norm(c.text) === norm(name));
+      if (i >= 0) return i;
+    }
+    return -1;
+  };
+  const summaryAt = indexOf("Summary");
+  const driveAt = indexOf("Total Drive Time", "Drive Time");
 
   const days: ScheduleDay[] = [];
-  const legend: LegendEntry[] = [];
+  const legendRows: LegendEntry[] = [];
 
-  for (const row of rows.slice(hIdx + 1)) {
-    const day = txt(row, 0);
+  for (const raw of rows.slice(hIdx + 1)) {
+    const cols = byColumn(raw);
+    const day = cols[0]?.text ?? "";
+
     if (day) {
       const events: ScheduleEvent[] = [];
-      let col = 0;
-      for (const cell of row.slice(2)) {
-        if (cell.text) {
-          events.push({
-            time: hours[col] ?? "",
-            text: cell.text,
-            bg: cell.bg,
-            span: cell.colspan,
-          });
-        }
-        col += cell.colspan;
-      }
-      days.push({ label: day, summary: txt(row, 1), events });
-    } else {
-      // A legend row: no day, but a label somewhere in the row.
-      const labelCell = row.find((c) => c.text);
-      if (!labelCell) continue;
-      const swatch = row.find((c) => c.bg) ?? labelCell;
-      legend.push({ label: labelCell.text, bg: swatch.bg });
+      cols.forEach((cell, i) => {
+        if (!cell || !cell.text || i < firstHour) return;
+        events.push({
+          time: hourLabel.get(i) ?? "",
+          text: cell.text,
+          bg: cell.bg,
+          fg: cell.fg,
+          span: cell.colspan,
+        });
+      });
+      days.push({
+        label: day,
+        summary: summaryAt >= 0 ? (cols[summaryAt]?.text ?? "") : "",
+        driveTime: driveAt >= 0 ? (cols[driveAt]?.text ?? "") : "",
+        events,
+      });
+      continue;
+    }
+
+    // A key row: no day, but a label somewhere in the row.
+    const labelCell = raw.find((c) => c.text);
+    if (!labelCell) continue;
+    if (norm(labelCell.text) === "key") continue;
+    legendRows.push({
+      label: labelCell.text,
+      bg: raw.find((c) => c.bg)?.bg ?? "",
+      fg: raw.find((c) => c.fg)?.fg ?? "",
+    });
+  }
+
+  // Fills describe the activity; text colours describe the city.
+  const types = legendRows.filter((e) => e.bg);
+  const cities = legendRows.filter((e) => !e.bg && e.fg);
+
+  const typeByBg = new Map(types.map((e) => [e.bg, e.label]));
+  const cityByFg = new Map(cities.map((e) => [e.fg, e.label]));
+
+  for (const day of days) {
+    for (const event of day.events) {
+      event.type = (event.bg && typeByBg.get(event.bg)) || undefined;
+      event.city =
+        (event.fg && cityByFg.get(event.fg)) || cityFromText(event.text) || undefined;
     }
   }
 
-  return { days, legend };
+  return { days, types, cities };
 }
 
 /* ------------------------------------------------------------------- lodging */
@@ -324,18 +405,42 @@ export function parseActivities(tab: Tab): Activity[] {
 
 /* ------------------------------------------------- merging the hikes tab */
 
-const COASTAL = /cannon|seaside|coast|manzanita|rockaway|tillamook|tillamoolk|nehalem|hug point|wheeler|ecola|short sand|oceanside|astoria/i;
-const INLAND = /portland|pdx|vancouver|gorge|columbia|hillsboro|beaverton|multnomah|silver falls|willamette/i;
+const COASTAL = /cannon|seaside|manzanita|rockaway|tillamook|tillamoolk|nehalem|hug point|wheeler|ecola|short sand|arch cape|oceanside|astoria/i;
+const PORTLAND = /portland|pdx|hillsboro|beaverton|hawthorne|multnomah|willamette|gresham/i;
+const WASHINGTON = /vancouver|\bwa\b|washington|stevenson|bonneville|beacon rock|cascade locks|bridge of the gods/i;
+
+const PLACES: [ActivityRole, RegExp][] = [
+  ["coast", COASTAL],
+  ["inland", PORTLAND],
+  ["washington", WASHINGTON],
+];
+
+function hits(tab: Tab, re: RegExp): number {
+  const text = [tab.name, ...tab.rows.flatMap((r) => r.map((c) => c.text))].join(" \n ");
+  return (text.match(new RegExp(re.source, "gi")) ?? []).length;
+}
 
 /**
  * How coastal a things-to-do tab looks, judged from its contents rather than
  * its tab name — the sheet's tab names aren't guaranteed to say "Cannon Beach".
- * Positive means coast, negative means Portland.
+ * Positive means coast.
  */
 export function coastAffinity(tab: Tab): number {
-  const text = [tab.name, ...tab.rows.flatMap((r) => r.map((c) => c.text))].join(" \n ");
-  const count = (re: RegExp) => (text.match(new RegExp(re.source, "gi")) ?? []).length;
-  return count(COASTAL) - count(INLAND);
+  return hits(tab, COASTAL) - Math.max(hits(tab, PORTLAND), hits(tab, WASHINGTON));
+}
+
+/** Best-matching place for a things-to-do tab, or "other" if nothing fits. */
+export function placeOf(tab: Tab): ActivityRole {
+  let best: ActivityRole = "other";
+  let bestScore = 0;
+  for (const [role, re] of PLACES) {
+    const score = hits(tab, re);
+    if (score > bestScore) {
+      bestScore = score;
+      best = role;
+    }
+  }
+  return best;
 }
 
 /**
@@ -347,8 +452,8 @@ export function isCoastBound(activity: Activity): boolean {
   return COASTAL.test(activity.location) || COASTAL.test(activity.name);
 }
 
-/** Which of the two things-to-do lists this is. */
-export type ActivityRole = "coast" | "inland" | "other";
+/** Which things-to-do list this is. */
+export type ActivityRole = "coast" | "inland" | "washington" | "other";
 
 export type ActivitySection = {
   tab: Tab;
@@ -361,6 +466,7 @@ export type ActivitySection = {
 const ROLE_LABELS: Record<ActivityRole, string> = {
   coast: "Cannon Beach",
   inland: "Portland",
+  washington: "Washington",
   other: "",
 };
 
@@ -386,24 +492,31 @@ export function mergeActivityTabs(activityTabs: Tab[]): {
 
   const listOrAll = listTabs.length ? listTabs : activityTabs;
 
-  // Decide which list is the coastal one from its contents, so tab names
-  // don't have to spell it out.
-  const scored = listOrAll.map((tab) => ({ tab, score: coastAffinity(tab) }));
-  const coastTab =
-    listOrAll.length > 1
-      ? scored.reduce((best, cur) => (cur.score > best.score ? cur : best)).tab
-      : scored[0]?.score > 0
-        ? scored[0].tab
-        : null;
-  const inlandTab =
-    listOrAll.length > 1
-      ? scored.reduce((best, cur) => (cur.score < best.score ? cur : best)).tab
-      : coastTab
-        ? null
-        : (listOrAll[0] ?? null);
+  // Assign each list a place from its contents, so tab names don't have to
+  // spell it out. If two tabs claim the same place, the stronger match keeps
+  // it and the other falls back to its own tab name.
+  const claims = new Map<ActivityRole, { tab: Tab; score: number }>();
+  const roles = new Map<Tab, ActivityRole>();
 
-  const roleOf = (tab: Tab): ActivityRole =>
-    tab === coastTab ? "coast" : tab === inlandTab ? "inland" : "other";
+  for (const tab of listOrAll) {
+    const role = placeOf(tab);
+    roles.set(tab, role);
+    if (role === "other") continue;
+    const held = claims.get(role);
+    const score = hits(tab, PLACES.find(([r]) => r === role)![1]);
+    if (!held || score > held.score) {
+      if (held) roles.set(held.tab, "other");
+      claims.set(role, { tab, score });
+    } else {
+      roles.set(tab, "other");
+    }
+  }
+
+  const roleOf = (tab: Tab): ActivityRole => roles.get(tab) ?? "other";
+  const coastTab = claims.get("coast")?.tab ?? null;
+  // Hikes that aren't coastal belong with Portland; if there's no Portland
+  // list, the first list takes them.
+  const inlandTab = claims.get("inland")?.tab ?? listTabs.find((t) => t !== coastTab) ?? null;
 
   // Nothing to fold into, or nothing to fold: render each tab as it comes.
   if (!hikeTabs.length || !listTabs.length) {
@@ -432,7 +545,18 @@ export function mergeActivityTabs(activityTabs: Tab[]): {
 
 /* --------------------------------------------------------------- restaurants */
 
-export type Restaurant = { name: string; location: string; notes: string; href?: string };
+export type Restaurant = {
+  name: string;
+  location: string;
+  notes: string;
+  /** "Thai BBQ", "Korean", … */
+  cuisine: string;
+  /** e.g. "Trivia Wed 7-9", pulled out of the notes. */
+  trivia: string;
+  /** Opening constraints found in the notes, e.g. "Wed-Sat". */
+  hours: string[];
+  href?: string;
+};
 
 /** Turn eempdx.com / hanoakpdx.com / kmdpdx.com / dtf.com into a readable name. */
 export function nameFromUrl(url: string): string {
@@ -453,19 +577,57 @@ export function nameFromUrl(url: string): string {
   }
 }
 
+/** "Trivia Wed 7-9" and similar, so it can be pilled separately. */
+const TRIVIA = /\btrivia\b[^,;]*/i;
+/** Day-range or last-entry style constraints worth surfacing. */
+const HOURS = [
+  /\b(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)[a-z]*\s*[-–]\s*(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)[a-z]*\b/i,
+  /\blast entry[^,;]*/i,
+  /\bclosed[^,;]*/i,
+  /\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*[-–]\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/i,
+  /\bcan book[^,;]*/i,
+];
+
 export function parseRestaurants(tab: Tab): Restaurant[] {
   const i = headerIndex(tab.rows);
+  if (i < 0) return [];
+  const columns = columnsOf(tab.rows[i]);
+
   return tab.rows
     .slice(i + 1)
     .filter((r) => nonEmpty(r) > 0)
     .map((r) => {
-      const href = r.find((c) => c.href)?.href;
-      const rawNotes = txt(r, 2);
-      const linkText = r.find((c) => /^https?:\/\//i.test(c.text))?.text;
-      const url = href ?? linkText;
-      const name = txt(r, 0) || (url ? nameFromUrl(url) : "");
+      const href =
+        colCell(r, columns, "Website", "Link", "URL")?.href ?? r.find((c) => c.href)?.href;
+      const linkText =
+        col(r, columns, "Website", "Link", "URL") ||
+        (r.find((c) => /^https?:\/\//i.test(c.text))?.text ?? "");
+      const url = href || (/^https?:\/\//i.test(linkText) ? linkText : undefined);
+
+      const name = col(r, columns, "Name") || (url ? nameFromUrl(url) : "");
+      const rawNotes = col(r, columns, "Notes");
       const notes = rawNotes && rawNotes === url ? "" : rawNotes;
-      return { name, location: txt(r, 1), notes, href: url };
+
+      const trivia = notes.match(TRIVIA)?.[0]?.trim() ?? "";
+      const hours: string[] = [];
+      let rest = trivia ? notes.replace(TRIVIA, "") : notes;
+      for (const re of HOURS) {
+        const hit = rest.match(re)?.[0]?.trim();
+        if (hit) {
+          hours.push(hit);
+          rest = rest.replace(re, "");
+        }
+      }
+
+      return {
+        name,
+        location: col(r, columns, "Location", "Address"),
+        cuisine: col(r, columns, "Type of Food", "Type", "Cuisine"),
+        notes: rest.replace(/\s*[,;]\s*/g, ", ").replace(/^[\s,;]+|[\s,;]+$/g, ""),
+        trivia,
+        hours,
+        href: url,
+      };
     })
     .filter((r) => r.name || r.href);
 }

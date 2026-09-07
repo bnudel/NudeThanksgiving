@@ -122,7 +122,7 @@ renaming a tab won't break anything:
 | `Things to do` | Activity cards with rank, reservation flag, notes |
 | `Hike Name` | Folded into the things-to-do lists, tagged as a hike |
 | `Date` + `What` + `How Much` | Payments table |
-| `Name` + `Location` + `Notes` | Restaurant cards (name inferred from the link if blank) |
+| `Name` + `Location` + `Notes` | Restaurant cards with cuisine, trivia and hours pills |
 | anything else | A plain styled table |
 
 That last row matters: **a brand-new tab you add later will still render**, just
@@ -134,14 +134,15 @@ Portland tab (six) share one layout.
 
 ### Things to do, and the Hikes tab
 
-There is **one** "Things to do" section with a toggle between **Cannon Beach**
-and **Portland**, each button showing its count. Both panels stay in the page
+There is **one** "Things to do" section with a toggle between **Cannon Beach**,
+**Portland** and **Washington**, each button showing its count. Both panels stay in the page
 markup (the inactive one is `hidden`), so browser find still reaches every
 entry and the content is there without JavaScript.
 
-The toggle labels come from the detected role, not from the tab names — so the
-buttons read "Cannon Beach" and "Portland" whatever the tabs are called. A
-third things-to-do tab would get a third button labelled with its tab name.
+The toggle labels come from the place each tab's contents point at, not from
+the tab names — a list full of Vancouver and Stevenson addresses becomes
+"Washington" whatever its tab is called. A list that doesn't match any known
+place keeps its own tab name as its label.
 
 The Hikes tab stays in the spreadsheet — it's still the easiest place to
 collect them — but it doesn't get a section of its own. Its rows are appended
@@ -177,10 +178,23 @@ cost containing the word "paid" shows a Paid badge automatically.
 
 ### Schedule colours
 
-The legend rows at the bottom of the Schedule tab define the categories. The
-site reads each legend row's fill colour, then matches every event cell's fill
-against it to label the event. Change a legend colour in the sheet and the site
-follows. Merged cells become multi-hour events automatically.
+The key at the bottom of the Schedule tab drives two separate badges, read from
+two different colour channels of the same cell:
+
+- **Cell fill → activity type.** Rows in the key that have a background colour
+  (Travel, Dining, Hiking…) are matched against each entry's fill.
+- **Text colour → city.** Rows that have coloured *text* and no fill
+  (Cannon Beach, OR / Portland, OR / Vancouver, WA) are matched against each
+  entry's font colour.
+
+A row labelled "Key" is treated as a heading and skipped. If an entry's font
+colour doesn't match anything, the city is guessed from place names in the
+entry text — so "Dinner in Vancouver" still gets tagged even without colour.
+
+**Hour columns are found by their heading** ("7am", "2pm"), not by counting
+from the left, so inserting a column like `Total Drive Time` doesn't shift the
+timeline. Total Drive Time renders under the day's summary. Merged cells become
+multi-hour entries automatically.
 
 ## Layout
 

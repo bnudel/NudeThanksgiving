@@ -214,10 +214,6 @@ export default async function Page() {
             Nudelman/Veldran
             <em>Thanksgiving 2026</em>
           </h1>
-          <p className="hero-sub">
-            November 21–29 on the Oregon coast. Grey skies, standing water, a very large rock, and
-            all of us in one place.
-          </p>
           <Countdown />
         </div>
       </header>

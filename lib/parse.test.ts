@@ -13,6 +13,7 @@ import {
   parseLodging,
   parseRestaurants,
   parseSchedule,
+  placeOf,
   slug,
   titleFor,
 } from "./model.ts";
@@ -27,6 +28,9 @@ const STYLE = `<style type="text/css">
 .ritz .waffle .s2{background-color:#a4c2f4;color:#000000;}
 .ritz .waffle .s3{background-color:#ffe599;color:#000000;}
 .ritz .waffle .s4{background-color:#b6d7a8;color:#000000;}
+.ritz .waffle .s6{background-color:#b6d7a8;color:#b45f06;}
+.ritz .waffle .s7{background-color:#ffffff;color:#b45f06;}
+.ritz .waffle .s8{background-color:#ffffff;color:#674ea7;}
 </style>`;
 
 const MENU = `<ul id="sheet-menu">
@@ -181,7 +185,7 @@ const SCHEDULE_HTML = page([
   row(td("s0", "") + td("s4", "No reservation needed") + blank(3)),
 ]);
 
-test("parseSchedule separates days from the colour legend", () => {
+test("parseSchedule separates days from the colour key", () => {
   const s = parseSchedule({ gid: "1", name: "Schedule", rows: parseGrid(SCHEDULE_HTML) });
 
   assert.equal(s.days.length, 2);
@@ -190,7 +194,7 @@ test("parseSchedule separates days from the colour legend", () => {
   assert.equal(s.days[1].events.length, 0, "empty day has no events");
 
   assert.deepEqual(
-    s.legend.map((l) => [l.label, l.bg]),
+    s.types.map((l) => [l.label, l.bg]),
     [
       ["Travel", "#a4c2f4"],
       ["Dinner Reservation Booked", "#ffe599"],
@@ -199,15 +203,99 @@ test("parseSchedule separates days from the colour legend", () => {
   );
 });
 
-test("schedule events land on the right hour and match a legend colour", () => {
+test("schedule events land on the right hour and pick up their type", () => {
   const s = parseSchedule({ gid: "1", name: "Schedule", rows: parseGrid(SCHEDULE_HTML) });
   const [event] = s.days[0].events;
   assert.equal(event.text, "3 Vs arrive");
   assert.equal(event.time, "7am", "column offset accounts for the leading blank cell");
   assert.equal(event.bg, "#a4c2f4");
+  assert.equal(event.type, "Travel", "the fill resolves to a key entry");
+});
 
-  const legendColors = new Set(s.legend.map((l) => l.bg));
-  assert.ok(legendColors.has(event.bg), "event colour resolves to a legend category");
+test("an inserted metadata column doesn't shift the timeline", () => {
+  // "Total Drive Time" took 6am's place, so hours now start at 7am. Hour
+  // columns are found by their heading, not by counting from the left.
+  const html = page([
+    row(
+      td("s1", "Day") +
+        td("s1", "Summary") +
+        td("s1", "Total Drive Time") +
+        td("s1", "7am") +
+        td("s1", "8am") +
+        td("s1", "9am") +
+        td("s1", "10am"),
+    ),
+    row(
+      td("s0", "Saturday, November 21") +
+        td("s0", "Travel Day") +
+        td("s0", "1 hour and 40 Minutes") +
+        td("s0", "") +
+        td("s0", "") +
+        td("s0", "") +
+        td("s2", "K,T,E,M,Gma Land"),
+    ),
+  ]);
+  const s = parseSchedule({ gid: "1", name: "Schedule", rows: parseGrid(html) });
+  const day = s.days[0];
+
+  assert.equal(day.summary, "Travel Day");
+  assert.equal(day.driveTime, "1 hour and 40 Minutes");
+  assert.deepEqual(
+    day.events.map((e) => [e.time, e.text]),
+    [["10am", "K,T,E,M,Gma Land"]],
+    "the drive-time column is not mistaken for an hour",
+  );
+});
+
+test("the key splits into activity fills and city text colours", () => {
+  const cityTd = (label: string, cls: string) => row(td("s0", "") + td(cls, label));
+  const html = page([
+    row(td("s1", "Day") + td("s1", "Summary") + td("s1", "Total Drive Time") + td("s1", "9am")),
+    row(
+      td("s0", "Sunday, November 22") +
+        td("s0", "Beach day") +
+        td("s0", "15 Minutes") +
+        // Fill = Beach, text colour = Cannon Beach.
+        td("s6", "Cannon Beach"),
+    ),
+    row(td("s0", "") + td("s0", "Key")),
+    row(td("s0", "") + td("s3", "Dining")),
+    row(td("s0", "") + td("s4", "Beach")),
+    row(blank(2)),
+    cityTd("Cannon Beach, OR", "s7"),
+    cityTd("Portland, OR", "s8"),
+  ]);
+
+  const s = parseSchedule({ gid: "1", name: "Schedule", rows: parseGrid(html) });
+
+  assert.deepEqual(s.types.map((t) => t.label), ["Dining", "Beach"], "fills are activity types");
+  assert.deepEqual(
+    s.cities.map((c) => c.label),
+    ["Cannon Beach, OR", "Portland, OR"],
+    "text-coloured rows are cities, and the 'Key' heading is skipped",
+  );
+
+  const event = s.days[0].events[0];
+  assert.equal(event.type, "Beach", "fill resolves to the activity type");
+  assert.equal(event.city, "Cannon Beach, OR", "text colour resolves to the city");
+});
+
+test("a city is inferred from the text when no colour matches", () => {
+  const html = page([
+    row(td("s1", "Day") + td("s1", "Summary") + td("s1", "Total Drive Time") + td("s1", "2pm")),
+    row(
+      td("s0", "Saturday, November 28") +
+        td("s0", "Vancouver") +
+        td("s0", "20 Minutes") +
+        td("s0", "Vancouver, WA Shops and Downtown"),
+    ),
+  ]);
+  const s = parseSchedule({ gid: "1", name: "Schedule", rows: parseGrid(html) });
+  assert.equal(
+    s.days[0].events[0].city,
+    "Vancouver, WA",
+    "falls back to place names in the entry itself",
+  );
 });
 
 test("colspan advances the hour cursor", () => {
@@ -529,6 +617,35 @@ test("toggle labels survive unhelpful tab names", () => {
   assert.deepEqual(sections.map((s) => s.label), ["Cannon Beach", "Portland"]);
 });
 
+test("a Washington list gets its own toggle button", () => {
+  const washington = {
+    gid: "14",
+    name: "Washington",
+    rows: parseGrid(
+      page([
+        row(td("s1", "Things to do") + td("s1", "Location") + td("s1", "Notes")),
+        row(td("s0", "Vancouver waterfront") + td("s0", "1515 Broadway St, Vancouver, WA 98663") + td("s0", "")),
+        row(td("s0", "Beacon Rock") + td("s0", "34841 WA-14, Stevenson, WA 98648") + td("s0", "")),
+        row(td("s0", "Bonneville Hot Springs") + td("s0", "North Bonneville, WA 98639") + td("s0", "")),
+      ]),
+    ),
+  };
+
+  assert.equal(placeOf(washington), "washington");
+
+  const { sections } = mergeActivityTabs([COAST_TAB, PORTLAND_TAB, washington, hikesTab()]);
+  assert.deepEqual(
+    sections.map((s) => s.label),
+    ["Cannon Beach", "Portland", "Washington"],
+  );
+  const wa = sections.find((s) => s.label === "Washington")!;
+  assert.equal(wa.activities.filter((a) => a.isHike).length, 0, "hikes still split coast/Portland");
+  assert.equal(
+    sections.find((s) => s.label === "Portland")!.activities.filter((a) => a.isHike).length,
+    3,
+  );
+});
+
 test("a third list keeps its own tab name as its label", () => {
   const extra = {
     gid: "13",
@@ -580,6 +697,45 @@ test("nameFromUrl produces readable names", () => {
   assert.equal(nameFromUrl("https://www.kmdpdx.com/menu"), "Kann");
   assert.equal(nameFromUrl("https://dtf.com/en-us"), "Din Tai Fung");
   assert.equal(nameFromUrl("https://www.some-new-spot.com/"), "Some New Spot");
+});
+
+test("restaurants split cuisine, trivia and opening constraints into pills", () => {
+  const html = page([
+    row(
+      td("s1", "Name") +
+        td("s1", "Location") +
+        td("s1", "Website") +
+        td("s1", "Type of Food") +
+        td("s1", "Notes"),
+    ),
+    row(
+      td("s0", "Han Oak") +
+        td("s0", "511 NE 24th Ave, Portland, OR 97232") +
+        td("s0", '<a href="https://www.hanoakpdx.com/">hanoakpdx.com</a>') +
+        td("s0", "Korean") +
+        td("s0", "Wed-Sat"),
+    ),
+    row(
+      td("s0", "Wonderwood Springs") +
+        td("s0", "8811 N Lombard St, Portland, OR 97203") +
+        td("s0", "") +
+        td("s0", "American") +
+        td("s0", "Trivia Friday 6-8, Mini Golf, Ice cream Weird Vibes"),
+    ),
+  ]);
+  const [hanOak, wonderwood] = parseRestaurants({ gid: "6", name: "Food", rows: parseGrid(html) });
+
+  assert.equal(hanOak.cuisine, "Korean");
+  assert.deepEqual(hanOak.hours, ["Wed-Sat"], "day ranges become their own pill");
+  assert.equal(hanOak.href, "https://www.hanoakpdx.com/", "the Website column supplies the link");
+  assert.equal(hanOak.location, "511 NE 24th Ave, Portland, OR 97232");
+
+  assert.equal(wonderwood.trivia, "Trivia Friday 6-8");
+  assert.equal(
+    wonderwood.notes,
+    "Mini Golf, Ice cream Weird Vibes",
+    "what's left of the notes stays as text",
+  );
 });
 
 test("parseRestaurants fills blank names from the link", () => {
