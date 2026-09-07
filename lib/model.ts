@@ -748,23 +748,38 @@ export type TodoItem = {
 export type TodoGroup = { name: string; items: TodoItem[] };
 
 /**
- * A Google Sheets checkbox publishes as TRUE/FALSE, but depending on the
- * sheet it can also come through as a glyph or a real checkbox input. Accept
- * all of them so a ticked box always reads as done.
+ * What a ticked checkbox looks like once it's been through "Publish to web".
+ *
+ * Google renders checkbox cells inconsistently depending on the sheet: TRUE /
+ * FALSE text, a 1 or 0, a ballot-box glyph, a tick, or a real checkbox input.
+ * All of them are accepted so a ticked box reads as done whichever way this
+ * particular sheet exports.
  */
+const CHECKED = new Set([
+  "true",
+  "t",
+  "yes",
+  "y",
+  "1",
+  "done",
+  "complete",
+  "completed",
+  "booked",
+  "x",
+  "checked",
+  "✓",
+  "✔",
+  "✅",
+  "☑",
+  "☑️",
+  "☒",
+  "🗹",
+]);
+
 export function isChecked(value: string): boolean {
-  const v = value.trim().toLowerCase();
-  return (
-    v === "true" ||
-    v === "yes" ||
-    v === "y" ||
-    v === "done" ||
-    v === "x" ||
-    v === "✓" ||
-    v === "✔" ||
-    v === "☑" ||
-    v === "☒"
-  );
+  // Strip the variation selector some tick emoji carry.
+  const v = value.trim().toLowerCase().replace(/️/g, "");
+  return CHECKED.has(v);
 }
 
 export function parseTodos(tab: Tab): TodoGroup[] {
@@ -782,8 +797,14 @@ export function parseTodos(tab: Tab): TodoGroup[] {
     const label = txt(row, taskAt);
     if (!label) continue;
 
-    // A lone cell on a row is a section heading, not a task.
-    if (nonEmpty(row) === 1) {
+    const doneRaw = col(row, columns, "Done?", "Done", "Complete");
+    const struck = row[taskAt]?.strike === true;
+
+    // A section heading is a lone label with no checkbox beside it. Testing
+    // for the checkbox — not just for a lone cell — matters because a task
+    // whose only filled-in field is its name would otherwise be swallowed as
+    // a heading, taking the rest of its group with it.
+    if (nonEmpty(row) === 1 && !doneRaw.trim() && !struck) {
       current = { name: label, items: [] };
       groups.push(current);
       continue;
@@ -798,7 +819,8 @@ export function parseTodos(tab: Tab): TodoGroup[] {
       task: label,
       when: col(row, columns, "When?", "When", "Deadline"),
       who: col(row, columns, "Who?", "Who", "Owner"),
-      done: isChecked(col(row, columns, "Done?", "Done", "Complete")),
+      // A struck-through task counts as finished too, not just a ticked box.
+      done: isChecked(doneRaw) || struck,
       details: col(row, columns, "Details if Booked", "Details"),
       notes: col(row, columns, "Notes"),
     });

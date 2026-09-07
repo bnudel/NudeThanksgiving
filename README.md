@@ -204,9 +204,18 @@ columns are `Type` (the task), `When?`, `Who?`, `Done?`, `Details if Booked`
 and `Notes` — all optional except the task.
 
 Tick a checkbox in the sheet and the item crosses off here, with a filled box
-and the group header counting done-of-total. Google publishes checkboxes as
-`TRUE`/`FALSE`, but glyphs (`✓`, `☑`), `yes`, `x`, `done` and real checkbox
-inputs are all accepted too, so it works however your sheet exports.
+and the group header counting done-of-total. Google publishes checkboxes
+inconsistently, so `TRUE`/`FALSE`, `1`/`0`, glyphs (`✓`, `☑`, `✅`), `yes`,
+`x`, `done`, `booked` and real checkbox inputs are all accepted. A
+struck-through task counts as done too.
+
+A row is a group heading only when it's a lone label *with no checkbox beside
+it* — testing for the checkbox rather than just a lone cell, so a task with
+nothing filled in but its name doesn't get swallowed as a heading.
+
+If ticks still aren't showing, `/api/tabs?kind=todo` dumps every cell of that
+tab with its exact text, colours and flags — including Unicode codepoints for
+short values, so a checkbox glyph is unambiguous.
 
 ### Lodging
 

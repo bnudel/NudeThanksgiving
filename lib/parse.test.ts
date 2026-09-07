@@ -995,12 +995,63 @@ test("to-do items group under their headings and read their checkboxes", () => {
 });
 
 test("checkboxes are recognised however the sheet publishes them", () => {
-  for (const yes of ["TRUE", "true", "Yes", "y", "DONE", "x", "✓", "☑"]) {
-    assert.ok(isChecked(yes), `${yes} should read as done`);
-  }
-  for (const no of ["FALSE", "false", "no", "", "  ", "maybe", "☐"]) {
-    assert.ok(!isChecked(no), `${no || "(blank)"} should read as not done`);
-  }
+  const yes = [
+    "TRUE", "true", " True ", "T", "Yes", "y", "1",
+    "DONE", "complete", "completed", "booked",
+    "x", "checked", "✓", "✔", "✅", "☑", "☑️", "☒",
+  ];
+  for (const v of yes) assert.ok(isChecked(v), `«${v}» should read as done`);
+
+  const no = ["FALSE", "false", "0", "no", "n", "", "  ", "maybe", "☐", "-", "TBD"];
+  for (const v of no) assert.ok(!isChecked(v), `«${v || "blank"}» should read as not done`);
+});
+
+test("a struck-through task counts as done even with no checkbox", () => {
+  const STRIKE_STYLE = `<style>.ritz .waffle .s9{background-color:#ffffff;text-decoration:line-through;}</style>`;
+  const html = `<html><head>${STRIKE_STYLE}</head><body>
+<div id="sheets-viewport"><div class="ritz grid-container" id="1" dir="ltr">
+<table class="waffle"><tbody>
+${row(td("s1", "Type") + td("s1", "Done?"))}
+${row(td("s9", "Already sorted") + td("s0", ""))}
+${row(td("s0", "Still outstanding") + td("s0", "FALSE"))}
+</tbody></table></div></div></body></html>`;
+
+  const rows = parseGrid(html);
+  assert.equal(rows[1][0].strike, true, "line-through is captured off the style class");
+
+  const groups = parseTodos({ gid: "9", name: "To-Do", rows });
+  assert.deepEqual(
+    groups[0].items.map((t) => [t.task, t.done]),
+    [
+      ["Already sorted", true],
+      ["Still outstanding", false],
+    ],
+    "a struck task is done, and isn't mistaken for a group heading",
+  );
+});
+
+test("a task with only a name isn't swallowed as a group heading", () => {
+  // The failure mode if a checkbox ever publishes as an empty cell: a task
+  // row would look exactly like a section heading, and the whole group under
+  // it would disappear. The checkbox column being present is what tells them
+  // apart.
+  const html = page([
+    row(td("s1", "Type") + td("s1", "When?") + td("s1", "Done?")),
+    row(td("s1", "Activities") + td("s0", "") + td("s0", "")),
+    row(td("s0", "Japaneese Garden") + td("s0", "") + td("s0", "FALSE")),
+    row(td("s0", "Top Golf") + td("s0", "") + td("s0", "TRUE")),
+  ]);
+  const groups = parseTodos({ gid: "9", name: "To-Do", rows: parseGrid(html) });
+
+  assert.equal(groups.length, 1, "one group, not three");
+  assert.equal(groups[0].name, "Activities");
+  assert.deepEqual(
+    groups[0].items.map((t) => [t.task, t.done]),
+    [
+      ["Japaneese Garden", false],
+      ["Top Golf", true],
+    ],
+  );
 });
 
 test("a real checkbox input is read as its checked state", () => {

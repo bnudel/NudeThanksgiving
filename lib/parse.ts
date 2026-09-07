@@ -18,6 +18,8 @@ export type Cell = {
    */
   fg: string;
   bold: boolean;
+  /** Struck-through text — another way sheets mark something finished. */
+  strike: boolean;
   colspan: number;
   href?: string;
 };
@@ -111,7 +113,7 @@ export function unwrapHref(href: string | undefined): string | undefined {
 
 /* ------------------------------------------------------------------ styles */
 
-export type StyleMap = Record<string, { bg: string; fg: string; bold: boolean }>;
+export type StyleMap = Record<string, { bg: string; fg: string; bold: boolean; strike: boolean }>;
 
 /** Read `.ritz .waffle .s3{background-color:#ffe599;...}` rules. */
 export function parseStyles(html: string): StyleMap {
@@ -132,6 +134,7 @@ export function parseStyles(html: string): StyleMap {
       bg: normalizeColor(bg),
       fg: normalizeColor(fg, "#000000"),
       bold: weight === "bold" || Number(weight) >= 600,
+      strike: /text-decoration\s*:[^;]*line-through/i.test(body),
     };
   }
   return map;
@@ -211,7 +214,7 @@ export function parseGrid(html: string, styles: StyleMap = parseStyles(html)): C
       const isSpacer = /freezebar/i.test(classAttr) || (!cls && !stripTags(inner));
       if (isSpacer) continue;
 
-      const style = (cls && styles[cls]) || { bg: "", fg: "", bold: false };
+      const style = (cls && styles[cls]) || { bg: "", fg: "", bold: false, strike: false };
       const inlineStyle = attr(attrs, "style") ?? "";
       const inlineBg = normalizeColor(
         inlineStyle.match(/background-color\s*:\s*([^;]+)/i)?.[1],
@@ -232,6 +235,7 @@ export function parseGrid(html: string, styles: StyleMap = parseStyles(html)): C
         bg: inlineBg || style.bg,
         fg: inlineFg || style.fg,
         bold: style.bold || /<(b|strong)\b/i.test(inner),
+        strike: style.strike || /<(s|strike|del)\b/i.test(inner),
         colspan: Number(attr(attrs, "colspan") ?? 1) || 1,
         href: unwrapHref(inner.match(/<a[^>]*\shref\s*=\s*"([^"]*)"/i)?.[1]),
       });
