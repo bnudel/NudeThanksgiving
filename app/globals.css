@@ -186,7 +186,7 @@ h3 {
 .hero {
   position: relative;
   z-index: 2;
-  min-height: 88vh;
+  min-height: 70vh;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
